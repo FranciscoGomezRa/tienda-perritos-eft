@@ -1,0 +1,49 @@
+# =====================================================================
+# Entorno de DESARROLLO LOCAL (requisito EFT: orquestación con Compose)
+# Los nombres de servicio son los MISMOS que los Services de Kubernetes
+# (tienda-db / tienda-backend / tienda-frontend), así el proxy de nginx
+# y el backend funcionan sin cambios en local y en EKS (DNS interno).
+#
+# Uso:  copiar .env.example a .env (define MYSQL_ROOT_PASSWORD) y luego
+#       docker compose up --build     →  app en http://localhost:8080
+# =====================================================================
+
+services:
+  tienda-db:
+    build: ./db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-admin123}
+    volumes:
+      - db_data:/var/lib/mysql        # persistencia local (en EKS es emptyDir; ver informe)
+    networks: [perritos]
+    healthcheck:                      # backend arranca solo cuando MySQL responde
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  tienda-backend:
+    build: ./backend
+    environment:
+      DB_HOST: tienda-db
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-admin123}
+    ports:
+      - "3001:3001"                   # expuesto solo para pruebas directas de la API
+    networks: [perritos]
+    depends_on:
+      tienda-db:
+        condition: service_healthy
+
+  tienda-frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"                     # http://localhost:8080
+    networks: [perritos]
+    depends_on:
+      - tienda-backend
+
+networks:
+  perritos:                           # red interna: los servicios se resuelven por nombre
+
+volumes:
+  db_data:
