@@ -12,10 +12,37 @@ env:
   ECR_REPO_DB: tienda-db
 
 jobs:
+  # ========== ETAPA DE TEST (requisito EFT: build → test → push → deploy) ==========
+  # Corre ANTES del build/deploy y sin secrets: los tests unitarios del backend
+  # (jest + supertest) mockean la BD, por lo que no necesitan infraestructura.
+  # Si un test falla, el job de despliegue NI SIQUIERA parte (needs: test).
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias (npm ci)
+        run: npm ci
+
+      - name: Ejecutar tests unitarios
+        run: npm test
+
   build-and-deploy:
     runs-on: ubuntu-latest
+    needs: test
     # Los secrets (AWS + BD) viven en el Environment 'production'.
-    # Solo se exponen a este job porque lo declara explícitamente (refuerza IE5).
+    # Solo se exponen a este job porque lo declara explícitamente.
     environment: production
 
     steps:
@@ -37,33 +64,59 @@ jobs:
       - name: Definir tag de imagen
         run: echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
-      # ========== BUILD & PUSH DE IMÁGENES A ECR ==========
-      - name: Build & push FRONTEND
+      # ========== BUILD DE IMÁGENES (sin push todavía) ==========
+      # Doble tag por imagen: SHA corto del commit (trazabilidad) + latest.
+      - name: Build FRONTEND
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          cd frontend
-          docker build -t $ECR_REGISTRY/${ECR_REPO_FRONTEND}:${IMAGE_TAG} -t $ECR_REGISTRY/${ECR_REPO_FRONTEND}:latest .
-          docker push $ECR_REGISTRY/${ECR_REPO_FRONTEND}:${IMAGE_TAG}
-          docker push $ECR_REGISTRY/${ECR_REPO_FRONTEND}:latest
+          docker build -t $ECR_REGISTRY/${ECR_REPO_FRONTEND}:${IMAGE_TAG} -t $ECR_REGISTRY/${ECR_REPO_FRONTEND}:latest ./frontend
 
-      - name: Build & push BACKEND
+      - name: Build BACKEND
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          cd backend
-          docker build -t $ECR_REGISTRY/${ECR_REPO_BACKEND}:${IMAGE_TAG} -t $ECR_REGISTRY/${ECR_REPO_BACKEND}:latest .
-          docker push $ECR_REGISTRY/${ECR_REPO_BACKEND}:${IMAGE_TAG}
-          docker push $ECR_REGISTRY/${ECR_REPO_BACKEND}:latest
+          docker build -t $ECR_REGISTRY/${ECR_REPO_BACKEND}:${IMAGE_TAG} -t $ECR_REGISTRY/${ECR_REPO_BACKEND}:latest ./backend
 
-      - name: Build & push DB
+      - name: Build DB
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          cd db
-          docker build -t $ECR_REGISTRY/${ECR_REPO_DB}:${IMAGE_TAG} -t $ECR_REGISTRY/${ECR_REPO_DB}:latest .
-          docker push $ECR_REGISTRY/${ECR_REPO_DB}:${IMAGE_TAG}
-          docker push $ECR_REGISTRY/${ECR_REPO_DB}:latest
+          docker build -t $ECR_REGISTRY/${ECR_REPO_DB}:${IMAGE_TAG} -t $ECR_REGISTRY/${ECR_REPO_DB}:latest ./db
+
+      # ========== ESCANEO DE VULNERABILIDADES (Trivy) ==========
+      # Requisito EFT de seguridad básica: escanear las imágenes ANTES de publicarlas.
+      # exit-code 0 = informativo (no bloquea el deploy); severidades altas quedan en el log.
+      - name: Escaneo Trivy FRONTEND
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/tienda-frontend:latest
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+
+      - name: Escaneo Trivy BACKEND
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/tienda-backend:latest
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+
+      - name: Escaneo Trivy DB
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/tienda-db:latest
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+
+      # ========== PUSH A ECR ==========
+      - name: Push imágenes a ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          for repo in $ECR_REPO_FRONTEND $ECR_REPO_BACKEND $ECR_REPO_DB; do
+            docker push $ECR_REGISTRY/$repo:${IMAGE_TAG}
+            docker push $ECR_REGISTRY/$repo:latest
+          done
 
       # ========== KUBECTL + KUBECONFIG ==========
       - name: Instalar kubectl
@@ -85,7 +138,7 @@ jobs:
 
       # ========== SECRET DE MYSQL (generado desde GitHub Secrets) ==========
       # No se versiona ninguna contraseña: el Secret se crea aquí a partir del
-      # secret 'MYSQL_ROOT_PASSWORD' del Environment. (Requisito IE5)
+      # secret 'MYSQL_ROOT_PASSWORD' del Environment.
       - name: Crear/actualizar Secret de MySQL
         env:
           EKS_NAMESPACE: ${{ secrets.EKS_NAMESPACE }}
