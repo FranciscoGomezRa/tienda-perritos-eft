@@ -4,9 +4,9 @@ Aplicación web **CRUD de productos para mascotas** desplegada en **AWS EKS** me
 pipeline **CI/CD con GitHub Actions** que construye las imágenes, las publica en **Amazon ECR**
 y las despliega en el clúster, con **autoescalado de pods (HPA)** y **balanceo de carga (ELB)**.
 
-> Evaluación Parcial N°3 — *Introducción a Herramientas DevOps (ISY1101)* · Duoc UC.
+> Examen Final Transversal (EFT) — *Introducción a Herramientas DevOps (ISY1101)* · Duoc UC.
 > **Autores:** Francisco Gómez Ramos · Benjamin Aravena Rosales — **Docente:** Rafael Videla.
-> Informe completo en [`Informe_Prueba3.pdf`](Informe_Prueba3.pdf).
+> Informe completo en `Informe_EFT.docx`.
 
 ---
 
@@ -15,8 +15,12 @@ y las despliega en el clúster, con **autoescalado de pods (HPA)** y **balanceo 
 Llevar la aplicación «Tienda Perritos» (frontend + backend + base de datos) desde contenedores
 sueltos hacia un **entorno de orquestación productivo en la nube**, demostrando de forma verificable:
 
+- **Desarrollo local orquestado** con **Docker Compose** (3 servicios, red interna, healthcheck).
+- **Contenedores con buenas prácticas**: Dockerfile **multietapa**, imágenes minimalistas (alpine),
+  `.dockerignore`, usuario **non-root** y variables de entorno.
+- **CI/CD automatizado**: cada `push` a `main` **testea**, reconstruye, **escanea (Trivy)**, publica y despliega sin pasos manuales.
+- **Tests unitarios** del backend (Jest + supertest, BD mockeada) como compuerta del pipeline.
 - **Orquestación** de los 3 servicios en un clúster **Amazon EKS** (alta disponibilidad en 2 AZ).
-- **CI/CD automatizado**: cada `push` a `main` reconstruye, publica y despliega la app sin pasos manuales.
 - **Escalabilidad** con **HPA** (autoescalado horizontal de réplicas según uso de CPU).
 - **Balanceo de carga** y acceso público vía **Elastic Load Balancer**.
 - **Gestión segura de secretos** (credenciales fuera del código, en GitHub Environment).
@@ -30,7 +34,7 @@ sueltos hacia un **entorno de orquestación productivo en la nube**, demostrando
                  GitHub (push a main)
                         │
                         ▼
-            GitHub Actions (CI/CD)  ──build & push──►  Amazon ECR (3 repos)
+     GitHub Actions (test → build → scan → push)  ───►  Amazon ECR (3 repos)
                         │                                tienda-frontend
                         │                                tienda-backend
                         │ kubectl apply / set image       tienda-db
@@ -66,15 +70,17 @@ sueltos hacia un **entorno de orquestación productivo en la nube**, demostrando
 
 ```
 .
-├── frontend/        # Nginx + HTML/JS (Dockerfile, default.conf, index.html, app.js)
-├── backend/         # Node/Express (Dockerfile, server.js, package.json)
+├── frontend/        # Nginx + HTML/JS (Dockerfile, .dockerignore, default.conf, index.html, app.js)
+├── backend/         # Node/Express (Dockerfile multietapa, app.js, server.js, __tests__/)
 ├── db/              # MySQL 8 + init.sql (Dockerfile)
 ├── k8s/             # Manifiestos Kubernetes (deployments, services, HPA, namespace, secret.example)
-├── .github/workflows/deploy-eks.yml   # Pipeline CI/CD (build → push → deploy)
+├── docker-compose.yml                 # Entorno de desarrollo local (3 servicios + red + volumen)
+├── .github/workflows/deploy-eks.yml   # Pipeline CI/CD (test → build → scan → push → deploy)
 ├── .env.example     # Plantilla de variables (copiar a .env, que está en .gitignore)
-├── Informe_Prueba3.pdf / .txt         # Informe de la evaluación
-├── fotos/           # Capturas de evidencia (IE1–IE7)
-└── docs_profesor/   # Material original entregado por el profesor (referencia)
+├── Informe_EFT.txt  # Informe de la evaluación (base; el entregable final es .docx)
+├── PautaExamen.md / PlanTrabajo.md    # Checklist del EFT y ruta de trabajo
+├── fotos/           # Capturas de evidencia
+└── docs_profesor/   # Pauta oficial del EFT (referencia)
 ```
 
 ---
@@ -86,7 +92,8 @@ sueltos hacia un **entorno de orquestación productivo en la nube**, demostrando
 | Operar la infraestructura | Cuenta **AWS Academy Learner Lab** activa (rol `LabRole`) |
 | El pipeline | **GitHub** con el Environment `production` y sus Secrets configurados |
 | Administrar el clúster | **kubectl** (local) o **AWS CloudShell** |
-| Build local (opcional) | **Docker Desktop** |
+| Entorno local | **Docker Desktop** (docker compose) |
+| Tests | **Node.js 18+** (`npm test` en `backend/`) |
 
 ---
 
@@ -116,8 +123,10 @@ sueltos hacia un **entorno de orquestación productivo en la nube**, demostrando
 2. **Configura los Secrets** del Environment `production` (tabla de arriba).
 3. **Dispara el pipeline**: haz `push` a `main` (o ejecútalo manualmente desde la pestaña *Actions*).
    El workflow [`deploy-eks.yml`](.github/workflows/deploy-eks.yml) ejecuta:
-   `build & push` de las 3 imágenes a ECR → `update-kubeconfig` → crea el Secret de MySQL →
-   `apply` + `set image` + `rollout status` de DB, backend y frontend → verifica la Metrics API → aplica los HPA.
+   **tests unitarios** (job `test`, sin secrets) → `build` de las 3 imágenes → **escaneo Trivy**
+   (HIGH/CRITICAL) → `push` a ECR (tags `latest` + SHA del commit) → `update-kubeconfig` →
+   crea el Secret de MySQL → `apply` + `set image` + `rollout status` de DB, backend y frontend →
+   verifica la Metrics API → aplica los HPA. **Si un test falla, no se despliega nada.**
 4. **Obtén la URL pública** y abre la app:
    ```bash
    kubectl get svc tienda-frontend -n tienda   # copia el EXTERNAL-IP (http, puerto 80)
@@ -146,27 +155,33 @@ kubectl apply -f k8s/backend-hpa.yaml -f k8s/frontend-hpa.yaml -n tienda
 
 ---
 
-## 💻 Prueba local rápida (opcional, sin Kubernetes)
+## 💻 Entorno de desarrollo local (Docker Compose)
 
-Para probar solo la app en tu máquina con Docker (red puente entre los 3 contenedores):
+Los 3 servicios se levantan orquestados con [`docker-compose.yml`](docker-compose.yml):
+red interna `perritos` (los servicios se resuelven por nombre DNS, igual que en Kubernetes),
+healthcheck de MySQL como condición de arranque del backend y volumen de persistencia local.
 
 ```bash
-docker network create perritos
-
-docker build -t perritos-db ./db
-docker run -d --name tienda-db --network perritos \
-  -e MYSQL_ROOT_PASSWORD=admin123 perritos-db
-
-docker build -t perritos-backend ./backend
-docker run -d --name tienda-backend --network perritos \
-  -e DB_HOST=tienda-db -e DB_PASSWORD=admin123 -p 3001:3001 perritos-backend
-
-docker build -t perritos-frontend ./frontend
-docker run -d --name tienda-frontend --network perritos -p 8080:80 perritos-frontend
-# Abre http://localhost:8080
+cp .env.example .env      # define MYSQL_ROOT_PASSWORD (no se versiona)
+docker compose up --build # levanta db → backend → frontend
+# Abre http://localhost:8080  ·  API directa: http://localhost:3001/api/health
+docker compose down       # (agrega -v para borrar también los datos)
 ```
 
-> Variables que lee el backend (`server.js`): `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_PORT`, `PORT`.
+> Variables que lee el backend (`app.js`): `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_PORT`, `PORT`.
+
+---
+
+## 🧪 Tests
+
+Tests unitarios del backend con **Jest + supertest**; la BD se **mockea**, así que corren
+sin infraestructura (por eso son la primera compuerta del pipeline):
+
+```bash
+cd backend
+npm install
+npm test        # 7 tests: health, CRUD, validaciones 400/404, error 500 de BD
+```
 
 ---
 

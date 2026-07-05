@@ -32,17 +32,17 @@ node group, ECR, secrets), diagrama `arquitectura.svg`, informe TXT como base, g
 ### Fase A — Montaje del proyecto y repo Git
 - [x] Copiar base reutilizable desde `Prueba3\` (código, k8s, workflow, fotos, informe TXT)
 - [x] Crear `PautaExamen.md` + `PlanTrabajo.md`
-- [ ] `git init` + commit inicial (base app)
+- [x] `git init` + commit inicial (base app)
 - [ ] Usuario crea repo GitHub **público** `tienda-perritos-eft` + remote + push
-- [ ] Adaptar `README.md` al EFT (compose, tests, Trivy; quitar referencias a "Prueba 3")
+- [x] Adaptar `README.md` al EFT (compose, tests, Trivy; quitar referencias a "Prueba 3")
 
 ### Fase B — Brechas técnicas
-- [ ] `docker-compose.yml` (3 servicios, red `perritos`, healthcheck MySQL, volumen local)
-- [ ] `backend/Dockerfile` multietapa + `USER node`
-- [ ] `.dockerignore` en `frontend/`, `backend/`, `db/`
-- [ ] Tests: split `app.js`/`server.js`, Jest + supertest, `npm test` verde
-- [ ] Pipeline: job `test` (needs) + paso Trivy + (mantener tags SHA+latest)
-- [ ] Verificación local: `docker compose up --build` → CRUD OK en `localhost:8080`
+- [x] `docker-compose.yml` (3 servicios, red `perritos`, healthcheck MySQL, volumen local)
+- [x] `backend/Dockerfile` multietapa + `USER node`
+- [x] `.dockerignore` en `frontend/`, `backend/`, `db/`
+- [x] Tests: split `app.js`/`server.js`, Jest + supertest, `npm test` verde (7/7)
+- [x] Pipeline: job `test` (needs) + paso Trivy + (mantener tags SHA+latest)
+- [x] Verificación local: `docker compose up --build` → CRUD OK en `localhost:8080`
 
 ### Fase C — Infraestructura AWS desde 0 (receta P3, por consola)
 - [ ] VPC `tienda-vpc` 10.0.0.0/16 · 2 AZ · 2 públicas + 4 privadas · 1 NAT

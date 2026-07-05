@@ -5,7 +5,9 @@
 > **Cuando preguntes "¿en qué parte vamos?", la respuesta sale de aquí.**
 > Estados: ✅ hecho · 🔄 en curso · ⬜ pendiente. El checklist de requisitos vive en [PautaExamen.md](PautaExamen.md).
 
-**Última actualización:** 2026-07-05 — Fase A en curso (base copiada, documentos de ruta creados).
+**Última actualización:** 2026-07-05 — Fases A y B COMPLETAS en local (solo falta A4: crear el repo en GitHub y pushear).
+Stack compose verificado: 7/7 tests verdes, CRUD OK en localhost:8080, backend non-root.
+📸 Pendientes de esta sesión: `IE2_compose_up.png`, `IE2_app_local.png`, `IE3_npm_test_local.png`.
 
 ---
 
@@ -15,9 +17,9 @@
 |---|---|---|---|---|
 | A1 | Copiar base reutilizable desde Prueba3 (código, k8s, workflow, fotos, informe TXT) | ✅ | — | — |
 | A2 | Crear `PautaExamen.md` + `PlanTrabajo.md` | ✅ | — | — |
-| A3 | `git init` + commit inicial `feat(app): base tienda perritos (frontend+backend+db+k8s)` | ⬜ | §Repositorio | — |
-| A4 | Usuario crea repo GitHub **público** `tienda-perritos-eft` → `git remote add origin` → push | ⬜ | §Repositorio | 📸 luego (estructura repo/commits, para IE1) |
-| A5 | Adaptar `README.md` al EFT | ⬜ | — | — |
+| A3 | `git init` + commit inicial `feat(app): base tienda perritos (frontend+backend+db+k8s)` — `154ed23` | ✅ | §Repositorio | — |
+| A4 | Usuario crea repo GitHub **público** `tienda-perritos-eft` → `git remote add origin` → push | 🔄 | §Repositorio | 📸 luego (estructura repo/commits, para IE1) |
+| A5 | Adaptar `README.md` al EFT | ✅ | — | — |
 
 **Commits planificados (IE1 evalúa el historial — uno por etapa, convención `tipo(área): descripción`):**
 1. `feat(app): base tienda perritos...` (A3)
@@ -34,11 +36,11 @@
 
 | # | Paso | Estado | Sección informe | Foto |
 |---|---|---|---|---|
-| B1 | `docker-compose.yml`: servicios db (healthcheck) → backend (depends_on) → frontend (8080:80), red `perritos`, volumen BD, `env_file: .env` | ⬜ | §2 Contenedores | 📸 `IE2_compose_up.png` |
-| B2 | Backend Dockerfile **multietapa** (`deps` → runtime, `USER node`) + `.dockerignore` ×3. Frontend/db: justificar minimalismo (nginx:alpine / mysql:8) | ⬜ | §2 Contenedores + §8 Seguridad | — |
-| B3 | Tests: separar `backend/app.js` (exporta app) de `server.js` (listen); Jest+supertest, mock de `mysql2/promise`; casos: health 200, POST inválido 400, GET productos | ⬜ | §4 CI/CD | 📸 `IE3_npm_test_local.png` |
-| B4 | Pipeline: job `test` (node, sin secrets) → job `build-and-deploy` con `needs: test` + paso **Trivy** (HIGH/CRITICAL, informativo) antes del push | ⬜ | §4 CI/CD + §8 Seguridad | 📸 luego en C (corrida real) |
-| B5 | Verificación local: `npm test` verde + `docker compose up --build` + CRUD en `localhost:8080` | ⬜ | §2 Contenedores | 📸 `IE2_app_local.png` |
+| B1 | `docker-compose.yml`: servicios db (healthcheck) → backend (depends_on) → frontend (8080:80), red `perritos`, volumen BD, password vía `.env` — commit `dc3730d` | ✅ | §2 Contenedores | 📸 `IE2_compose_up.png` |
+| B2 | Backend Dockerfile **multietapa** (`deps` → runtime, `USER node`) + `.dockerignore` ×3 — commit `fdf4268`. Imágenes: frontend 93MB, backend 192MB | ✅ | §2 Contenedores + §8 Seguridad | — |
+| B3 | Tests: `backend/app.js` (exporta app) separado de `server.js` (listen); Jest+supertest, mock de `mysql2/promise`; 7 tests verdes — commit `796d99d` | ✅ | §4 CI/CD | 📸 `IE3_npm_test_local.png` |
+| B4 | Pipeline: job `test` (node, sin secrets) → `build-and-deploy` con `needs: test` + 3 pasos **Trivy** (HIGH/CRITICAL, informativo) entre build y push — commit `891ab86` | ✅ | §4 CI/CD + §8 Seguridad | 📸 luego en C (corrida real) |
+| B5 | Verificación local: 7/7 tests + `docker compose up --build` → health ok, 5 productos semilla, POST/DELETE OK vía proxy nginx, backend corre como `node` (non-root) | ✅ | §2 Contenedores | 📸 `IE2_app_local.png` |
 
 ---
 
