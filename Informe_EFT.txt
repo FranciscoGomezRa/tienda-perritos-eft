@@ -1,0 +1,551 @@
+================================================================================
+ INFORME — EVALUACIÓN PARCIAL N°3
+ CI/CD con Autoscaling y Load Balancer en AWS EKS — Aplicación "Tienda Perritos"
+ Asignatura: Introducción a Herramientas DevOps (ISY1101) — Duoc UC
+ Escuela de Informática y Telecomunicaciones
+================================================================================
+
+Instituto           : Duoc UC
+Asignatura          : Introducción a Herramientas DevOps
+Docente             : Rafael Videla
+Integrantes (dupla) : Francisco Gómez Ramos  ·  Benjamin Aravena Rosales
+Fecha               : 28 / 06 / 2026
+Repositorio GitHub  : github.com/FranciscoGomezRa/tienda-perritos-eks
+Región AWS / Clúster: us-east-1 / tienda-eks        Namespace: tienda
+
+Nota (1): Documento elaborado con apoyo de una herramienta de inteligencia
+artificial (Claude, de Anthropic) para la redacción y estructuración del texto.
+El contenido técnico, las decisiones de arquitectura y la evidencia fueron
+ejecutados y verificados por los integrantes.
+
+
+--------------------------------------------------------------------------------
+ 1. INTRODUCCIÓN
+--------------------------------------------------------------------------------
+El presente informe documenta el desarrollo de la Evaluación Parcial N°3 de la
+asignatura Introducción a Herramientas DevOps (ISY1101), cuyo propósito es llevar
+la aplicación web «Tienda Perritos» —una tienda en línea de productos para
+mascotas compuesta por un frontend (Nginx + JavaScript), un backend
+(Node.js / Express) y una base de datos MySQL— hacia un entorno de orquestación
+de contenedores productivo en la nube.
+
+Para lograrlo se implementó un clúster de Kubernetes gestionado en AWS EKS, un
+pipeline de integración y despliegue continuo (CI/CD) con GitHub Actions que
+automatiza el ciclo build → push → deploy, autoescalado horizontal de réplicas
+(HPA) y balanceo de carga mediante un Elastic Load Balancer. El objetivo es
+demostrar despliegue automatizado, escalabilidad, alta disponibilidad, gestión
+segura de credenciales y observabilidad.
+
+El documento se organiza siguiendo los siete indicadores de evaluación del
+encargo (IE1 a IE7). Cada indicador se acompaña de su justificación técnica, la
+evidencia gráfica real capturada durante la ejecución del proyecto y los comandos
+de CloudShell asociados, de modo que cada criterio de la rúbrica quede respaldado
+por una prueba verificable.
+
+
+--------------------------------------------------------------------------------
+ 2. CONTEXTO DEL CASO
+--------------------------------------------------------------------------------
+"Tienda Perritos" es un comercio electrónico dedicado a la venta de productos
+para mascotas. Tras haber contenedorizado su aplicación en etapas previas
+(Docker) y montar una infraestructura base en AWS, el negocio enfrenta un nuevo
+desafío: su catálogo y su tráfico crecen, las campañas y los picos de demanda son
+cada vez más frecuentes, y una caída del sitio o un despliegue manual fallido se
+traducen directamente en ventas perdidas.
+
+Frente a este escenario, el equipo técnico debe evolucionar desde "contenedores
+que corren en una máquina" hacia una plataforma de orquestación productiva capaz
+de:
+  • ejecutar la aplicación de forma escalable, agregando o quitando réplicas
+    según la carga real;
+  • mantenerse altamente disponible y tolerante a fallos, repartiéndose en varias
+    zonas de disponibilidad y autorrecuperándose ante la caída de un contenedor;
+  • automatizar por completo los despliegues desde GitHub, eliminando los pasos
+    manuales propensos a error;
+  • registrar logs y métricas para diagnosticar problemas y medir el desempeño;
+  • y proteger las credenciales sensibles (acceso a AWS y a la base de datos)
+    fuera del código fuente.
+
+Este informe responde a ese contexto: presenta la arquitectura diseñada para
+Tienda Perritos sobre AWS EKS y demuestra, con evidencia, que la solución cumple
+cada uno de esos objetivos de negocio traducidos en los indicadores técnicos
+IE1 a IE7.
+
+
+--------------------------------------------------------------------------------
+ 3. PROPUESTA DE SOLUCIÓN
+--------------------------------------------------------------------------------
+La solución propuesta orquesta los tres servicios de Tienda Perritos en un
+clúster Amazon EKS (tienda-eks, región us-east-1, namespace tienda), desplegando
+las imágenes desde un registro privado Amazon ECR y automatizando todo el ciclo
+de vida con GitHub Actions. Sus componentes principales son:
+
+Infraestructura de red (VPC)
+  • VPC tienda-vpc (10.0.0.0/16) distribuida en 2 zonas de disponibilidad
+    (us-east-1a y us-east-1b) para alta disponibilidad.
+  • 6 subredes: 2 públicas (alojan el Load Balancer y el NAT Gateway) y 4
+    privadas (alojan los nodos worker, sin IP pública).
+  • NAT Gateway para que los nodos privados tengan salida a Internet (por
+    ejemplo, para hacer docker pull desde ECR) sin quedar expuestos.
+
+Cómputo y orquestación
+  • Clúster EKS con plano de control gestionado por AWS y un node group de
+    instancias t3.medium (2/2/4) en las subredes privadas.
+  • Tres Deployments: frontend, backend y base de datos, cada uno con sus
+    requests/limits de CPU y sondas de salud (readiness/liveness).
+  • HPA (Horizontal Pod Autoscaler) sobre frontend y backend, alimentado por el
+    complemento Metrics Server del clúster.
+
+Conectividad y balanceo
+  • Service tienda-frontend de tipo LoadBalancer → expone la app por un Classic
+    ELB público (URL accesible desde el navegador).
+  • Services internos tienda-backend y tienda-db resueltos por DNS interno de
+    Kubernetes.
+
+Flujo de la petición del usuario
+  Usuario → ELB (subred pública) → Service/Pods frontend (Nginx) → Service
+  backend (DNS interno tienda-backend) → Pods backend (Node/Express) → Service db
+  (tienda-db) → MySQL.
+
+Flujo CI/CD
+  commit a la rama main → GitHub Actions (Environment production) → build de las
+  imágenes → push a ECR → kubectl set image + rollout status sobre EKS. Los
+  secretos (credenciales AWS y contraseña de MySQL) viven en un GitHub
+  Environment, nunca en el repositorio.
+
+
+================================================================================
+ 4. DESARROLLO DE LA SOLUCIÓN
+================================================================================
+A continuación se desarrolla cada indicador de evaluación (IE1–IE7). Para cada
+uno se indica la exigencia de la rúbrica para alcanzar el 100% de logro, la
+implementación realizada y su justificación, y la evidencia gráfica con los
+comandos de CloudShell empleados.
+
+
+--------------------------------------------------------------------------------
+ IE1 — CONFIGURACIÓN DEL CLÚSTER EN AWS (25%)
+--------------------------------------------------------------------------------
+Exigencia de la rúbrica · 100% de logro (ponderación 25%):
+"Clúster completamente funcional, roles IAM, VPC/subredes/SG correctos,
+ nodos/capacity providers operativos, arquitectura clara."
+
+Se creó la VPC tienda-vpc (10.0.0.0/16) con 6 subredes en 2 AZ (2 públicas + 4
+privadas) y un NAT Gateway para la salida a Internet de las subredes privadas. El
+clúster tienda-eks (Kubernetes 1.35) usa el rol IAM LabRole tanto para el plano
+de control como para los nodos, y un node group de instancias t3.medium
+(deseado/mín/máx = 2/2/4) ubicado en las subredes privadas.
+
+  JUSTIFICACIÓN DEL TIPO DE INSTANCIA (t3.medium) Y DESCARTE DE t2.micro/nano
+  --------------------------------------------------------------------------
+  Se eligió t3.medium (2 vCPU, 4 GiB RAM) como mínimo viable, descartando
+  instancias más pequeñas pese a su menor costo, por tres razones técnicas:
+
+  1) LÍMITE DE IPs POR NODO (factor decisivo). El plugin Amazon VPC CNI asigna
+     una IP de la VPC a cada pod, y la cantidad disponible depende del tamaño de
+     la instancia. t2.micro/nano permiten ~4 pods por nodo; t3.medium permite
+     ~17. Con solo 4 IPs no alcanza ni para los pods de sistema.
+
+  2) PODS DE SISTEMA. Cada nodo ya ejecuta CoreDNS, kube-proxy, aws-node (CNI) y
+     Metrics Server, lo que consume casi toda la capacidad de un t2.micro y
+     dejaría a la app sin espacio ni margen para escalar (pods en Pending).
+
+  3) MEMORIA. 0.5–1 GiB no basta para kubelet + pods de sistema + MySQL +
+     Node/Express; los nodos quedarían NotReady. Los 4 GiB de t3.medium dan
+     holgura para operar y escalar.
+
+  El ahorro de una instancia más pequeña es ilusorio, porque rompería la demo del
+  autoscaling (HPA), que es el núcleo del indicador de escalabilidad. El control
+  de créditos se gestionó por otras vías: desired=2, observabilidad apagada y
+  Stop Lab al terminar cada sesión.
+
+  PERMISOS IAM (políticas incluidas en LabRole)
+  ---------------------------------------------
+  No fue necesario crear ni adjuntar políticas: AWS Academy entrega LabRole con
+  un conjunto amplio de políticas administradas (y Learner Lab bloquea editar
+  roles IAM). Las 3 políticas clave para los nodos worker son:
+    • AmazonEKSWorkerNodePolicy — registra y opera la instancia EC2 como nodo del
+      clúster.
+    • AmazonEKS_CNI_Policy — habilita el plugin de red (VPC CNI) para asignar IPs
+      a los pods.
+    • AmazonEC2ContainerRegistryReadOnly — permiso de solo lectura sobre ECR
+      (autoriza el docker pull de las imágenes).
+  El rol del plano de control no hace pull de imágenes; su política relevante es
+  AmazonEKSClusterPolicy, también incluida en LabRole.
+
+  JUSTIFICACIÓN DEL DISEÑO DE RED (patrón de producción)
+  ------------------------------------------------------
+  Se evaluaron dos topologías. Camino A (lab simplificado): nodos en subredes
+  públicas con IP pública y sin NAT — más barato, pero expone los nodos y deja
+  sin uso las subredes privadas. Camino B (elegido, producción): nodos en
+  subredes privadas (sin IP pública), un NAT Gateway para su salida y el Load
+  Balancer en las públicas. Se eligió B por seguridad (el único punto de entrada
+  es el ELB), defensa en capas (aunque un pod sea comprometido, el nodo no está
+  expuesto), coherencia (las 6 subredes cumplen un rol real) y porque es la
+  arquitectura recomendada por AWS para EKS. El costo del NAT se mitigó usando uno
+  solo y apagando el lab al terminar.
+
+  ACCESO REMOTO A LOS NODOS = DESHABILITADO (sin SSH)
+  ---------------------------------------------------
+  En el node group se dejó OFF la opción de acceso remoto: toda la administración
+  se hace con kubectl desde CloudShell (que habla con el API del clúster, no con
+  los nodos por SSH). Habilitar esa opción abriría el puerto 22 y contradiría el
+  diseño de red privada. Si excepcionalmente se necesitara una shell en un nodo,
+  se usaría AWS SSM Session Manager (no abre el puerto 22, funciona sobre nodos
+  privados y queda auditado por IAM), de modo que dejar el acceso remoto en OFF no
+  elimina ese plan B.
+
+  EVIDENCIA
+  ---------
+  [FOTO] fotos/IE1_01_vpc_creacion.png
+         VPC tienda-vpc creada con 6 subredes (2 públicas + 4 privadas) y NAT.
+  [FOTO] fotos/IE1_03_subredes_6_lista.png
+         Las 6 subredes en estado Available, repartidas en us-east-1a/1b.
+  [FOTO] fotos/IE1_04_tags_subred_publica.png
+         Etiqueta kubernetes.io/role/elb = 1 en subred pública.
+  [FOTO] fotos/IE1_05_tags_subred_privada.png
+         Etiqueta kubernetes.io/role/internal-elb = 1 en subred privada.
+  [FOTO] fotos/IE1_06_cluster_endpoint_acceso.png
+         Acceso al endpoint del clúster configurado como "Público y privado".
+  [FOTO] fotos/IE1_07_complementos_marcados.png
+         Complementos: CoreDNS, kube-proxy y CNI de Amazon VPC.
+  [FOTO] fotos/IE1_09_review_cluster.png
+         Revisión: rol LabRole, modo "API de EKS", Kubernetes 1.35.
+  [FOTO] fotos/IE1_14_cluster_active.png
+         Clúster tienda-eks en estado Active.
+  [FOTO] fotos/IE1_16_nodegroup_compute.png
+         Node group: AMI AL2023, tipo t3.medium, disco 20 GiB.
+  [FOTO] fotos/IE1_17_nodegroup_scaling.png
+         Escalado del node group: deseado/mín/máx = 2/2/4.
+  [FOTO] fotos/IE1_18_nodegroup_subredes_privadas.png
+         Node group en las 4 subredes privadas; acceso remoto (SSH) en OFF.
+  [FOTO] fotos/IE1_20_nodos_ec2_privados.png
+         2 nodos Ready, uno por AZ, con EXTERNAL-IP <none> = sin IP pública.
+         CMD (CloudShell):
+           kubectl get nodes -o wide -L topology.kubernetes.io/zone
+
+
+--------------------------------------------------------------------------------
+ IE2 — DESPLIEGUE FRONTEND + BACKEND (25%)
+--------------------------------------------------------------------------------
+Exigencia de la rúbrica · 100% de logro (ponderación 25%):
+"Servicios desplegados correctamente desde ECR, variables correctas, puertos y
+ balanceador operativo."
+
+Se crearon tres repositorios privados en Amazon ECR (tienda-frontend,
+tienda-backend, tienda-db). Las imágenes se despliegan desde ECR con sus
+variables de entorno cargadas (DB_HOST, DB_USER, etc.). El balanceo se resuelve
+con el Service tienda-frontend de tipo LoadBalancer, que aprovisiona un Classic
+ELB público. La comunicación Front→Back→DB usa el DNS interno de Kubernetes.
+
+URL pública (EXTERNAL-IP del ELB):
+  http://a49d9bbc548ab48b19dddc7f331bf7c4-1672428966.us-east-1.elb.amazonaws.com
+  (HTTP, puerto 80)
+
+El EXTERNAL-IP se verificó por dos vías equivalentes: (1) automatizada, en los
+logs del pipeline; y (2) manual, desde CloudShell tras aws eks update-kubeconfig.
+
+  EVIDENCIA
+  ---------
+  [FOTO] fotos/IE2_01_ecr_repos.png
+         Los 3 repositorios privados en Amazon ECR (frontend, backend, db).
+  [FOTO] fotos/IE2_02_externalip_actions.png
+         EXTERNAL-IP del ELB visible en los logs de GitHub Actions.
+  [FOTO] fotos/IE2_03_externalip_cloudshell.png
+         Mismo EXTERNAL-IP obtenido desde CloudShell.
+         CMD (CloudShell):
+           aws eks update-kubeconfig --region us-east-1 --name tienda-eks
+           kubectl get svc -n tienda
+  [FOTO] fotos/IE2_04_app_navegador.png
+         Tienda Perritos cargada en el navegador desde la URL pública del ELB.
+
+
+--------------------------------------------------------------------------------
+ IE3 — CONFIGURACIÓN DE AUTOSCALING — HPA (10%)
+--------------------------------------------------------------------------------
+Exigencia de la rúbrica · 100% de logro (ponderación 10%):
+"Autoscaling configurado correctamente, métricas funcionando y justificación del
+ umbral."
+
+Se configuró HPA para ambos servicios visibles: backend 2→10 réplicas con umbral
+70% CPU, y frontend 2→6 réplicas con umbral 60% CPU. El requisito previo es el
+Metrics Server: se usa el complemento gestionado del clúster EKS (no el
+manifiesto de upstream). El HPA calcula el % de CPU contra el request de cada
+Deployment (backend request=100m / límite=500m), por lo que el umbral de 70%
+equivale a 70m de CPU.
+
+  JUSTIFICACIÓN DEL UMBRAL (70% backend / 60% frontend)
+  -----------------------------------------------------
+  Se deja margen antes de saturar el pod para que el HPA tenga tiempo de crear
+  réplicas nuevas (que tardan en arrancar) antes de degradar el servicio. El
+  frontend usa un umbral algo menor (60%) por ser la cara visible al usuario:
+  conviene anticiparse más a los picos de tráfico.
+
+  INCIDENTE RESUELTO: HPA en "<unknown>" / Metrics API caída
+  ----------------------------------------------------------
+  Síntoma: tras desplegar, el HPA mostraba "cpu <unknown>/70%" y kubectl top pods
+  devolvía "Metrics API not available". Diagnóstico: el pipeline instalaba además
+  el metrics-server de upstream, cuyo Service usa el selector "k8s-app"; al hacer
+  apply sobre el Service ya creado por el complemento del EKS (etiqueta
+  "app.kubernetes.io/name"), los selectores se fusionaron en un AND imposible →
+  sin endpoints → Metrics API caída. Solución de raíz: se eliminó del pipeline la
+  instalación de upstream y se dejó solo el complemento gestionado, añadiendo una
+  verificación de la Metrics API.
+
+  PRUEBA DE CARGA Y ESCALADO
+  --------------------------
+  Se generó carga artificial sobre el backend con un pod load-generator (10
+  bucles en paralelo de peticiones a /api/health) y se observó el HPA en vivo.
+  Resultado: el CPU subió a 435%, el HPA escaló 2 → 4 → 8 → 10 réplicas (tope
+  configurado) y, al repartirse la carga, el CPU promedio volvió bajo el umbral;
+  al retirar la carga, volvió a 2 réplicas tras el enfriamiento (~3–5 min).
+
+  EVIDENCIA
+  ---------
+  [FOTO] fotos/IE3_01_hpa_metricas_ok.png
+         Metrics API disponible: HPA con % real de CPU y kubectl top pods OK.
+         CMD (CloudShell):
+           kubectl get apiservices v1beta1.metrics.k8s.io
+           kubectl top pods -n tienda
+           kubectl get hpa -n tienda
+  [FOTO] fotos/IE3_02_hpa_escalando.png
+         HPA escalando: CPU sobre el umbral y réplicas subiendo (2→4→8).
+         CMD (CloudShell):
+           kubectl get hpa -n tienda -w        # con la carga activa
+  [FOTO] fotos/IE3_03_pods_escalados.png
+         Backend en carga (~77%/70%) con ~10 pods Running en ambos nodos.
+         CMD (CloudShell):
+           # terminal de carga:
+           kubectl run -n tienda load-generator --image=busybox:1.28 --restart=Never -- \
+             /bin/sh -c "for i in 1 2 3 4 5 6 7 8 9 10; do (while true; do \
+             wget -q -O- http://tienda-backend:3001/api/health >/dev/null 2>&1; done) & done; wait"
+           # monitor:
+           watch -n 2 "kubectl get hpa,pods -n tienda -o wide"
+  [FOTO] fotos/IE3_04_hpa_scaledown.png
+         Scale-down: tras retirar la carga el HPA reduce las réplicas a 2.
+         CMD (CloudShell):
+           kubectl delete pod load-generator -n tienda
+           kubectl get hpa -n tienda -w        # esperar ~5 min: REPLICAS -> 2
+
+  MEJORA FUTURA: un Cluster Autoscaler escalaría también los nodos EC2 cuando el
+  HPA pida más pods de los que caben. No se implementó (limitación del Learner
+  Lab), pero queda documentado.
+
+
+--------------------------------------------------------------------------------
+ IE4 — PIPELINE CI/CD — build → push → deploy (15%)
+--------------------------------------------------------------------------------
+Exigencia de la rúbrica · 100% de logro (ponderación 15%):
+"Pipeline completamente automatizado, funcional, seguro y documentado; deploy
+ exitoso."
+
+El workflow .github/workflows/deploy-eks.yml se dispara con cada push a main (y
+manualmente). Sus etapas son: configurar credenciales AWS → login en ECR →
+build & push de las tres imágenes (frontend, backend, db) → despliegue en EKS
+(kubectl set image + rollout status). El despliegue tras commit es automático y
+la corrida completa toma ~2 minutos (corrida #2: 1m56s). Las imágenes se
+etiquetan con el SHA corto + latest para trazabilidad.
+
+  EVIDENCIA
+  ---------
+  [FOTO] fotos/IE4_01_pipeline_verde.png
+         Pipeline de GitHub Actions en verde: build, push y deploy con éxito.
+
+
+--------------------------------------------------------------------------------
+ IE5 — GESTIÓN DE SECRETS Y CREDENCIALES (5%)
+--------------------------------------------------------------------------------
+Exigencia de la rúbrica · 100% de logro (ponderación 5%):
+"Secrets correctamente utilizados, seguros y bien estructurados; sin exposición."
+
+Los secretos viven en un GitHub Environment "production" (credenciales AWS, datos
+del clúster y MYSQL_ROOT_PASSWORD). Las credenciales de BD se manejan vía .env
+(en .gitignore) y el Secret de Kubernetes se genera dentro del pipeline a partir
+de los GitHub Secrets — nunca se versiona una contraseña. Se eligió un Environment
+(en lugar de secrets sueltos) por su aislamiento de alcance, sus reglas de
+protección y su trazabilidad.
+
+  EVIDENCIA
+  ---------
+  [FOTO] fotos/IE5_01_github_environment.png
+         GitHub Environment "production" para aislar los secretos del despliegue.
+  [FOTO] fotos/IE5_02_github_secrets.png
+         Secrets configurados (AWS_*, EKS_*, MYSQL_ROOT_PASSWORD).
+
+
+--------------------------------------------------------------------------------
+ IE6 — ANÁLISIS DE LOGS, MÉTRICAS Y TIEMPOS (10%)
+--------------------------------------------------------------------------------
+Exigencia de la rúbrica · 100% de logro (ponderación 10%):
+"Análisis completo de logs, errores, tiempos y métricas; conclusiones claras."
+
+Logs: kubectl logs del backend muestra "Servidor backend escuchando en puerto
+3001" y "Pool de conexiones MySQL inicializado" (conexión Back↔DB correcta); el
+frontend (nginx) registra respuestas 200 OK, incluidas las sondas kube-probe
+(readiness/liveness funcionando). Métricas: uso de CPU/memoria por pod vía
+Metrics Server (kubectl top pods). CloudWatch: se activaron temporalmente los
+logs del plano de control (API Server + Auditoría) → log group
+/aws/eks/tienda-eks/cluster, desactivados tras la captura para no consumir
+créditos. Tiempos: ~2 min por corrida completa del pipeline.
+
+  EVIDENCIA
+  ---------
+  [FOTO] fotos/IE6_01_logs.png
+         Logs: backend escuchando y pool MySQL OK; frontend respondiendo 200 OK.
+         CMD (CloudShell):
+           kubectl logs deploy/tienda-backend -n tienda --tail=40
+           kubectl logs deploy/tienda-frontend -n tienda --tail=20
+  [FOTO] fotos/IE6_02_cloudwatch.png
+         CloudWatch: log group /aws/eks/tienda-eks/cluster con streams del API
+         Server (consola CloudWatch, no CloudShell).
+
+
+--------------------------------------------------------------------------------
+ IE7 — VALIDACIÓN FUNCIONAL DEL CLÚSTER (Front → Back) (10%)
+--------------------------------------------------------------------------------
+Exigencia de la rúbrica · 100% de logro (ponderación 10%):
+"Servicios operativos, comunicación correcta, endpoints funcionando, logs y
+ recuperación post-deploy demostrados."
+
+Se validó el funcionamiento integral de Tienda Perritos: CRUD completo de
+productos desde la web (crear / editar / eliminar) con la comunicación
+Front→Back→DB operativa. Se comprobó la autorrecuperación de Kubernetes: al
+borrar un pod del backend, el clúster creó automáticamente uno nuevo (AGE 15s)
+manteniendo las 2 réplicas. La recuperación post-redeploy también se verificó:
+cada push ejecuta set image + rollout status, reemplazando los pods sin caída del
+servicio.
+
+  EVIDENCIA
+  ---------
+  [FOTO] fotos/IE7_01_cloudshell_get_ns_nodes.png
+         Estado sano: 2 nodos Ready y todos los recursos del namespace tienda.
+         CMD (CloudShell):
+           kubectl get nodes -o wide
+           kubectl get all -n tienda
+  [FOTO] fotos/IE7_02_pod_recreado.png
+         Autorrecuperación: al eliminar un pod del backend, Kubernetes recrea
+         otro automáticamente.
+         CMD (CloudShell):
+           kubectl get pods -n tienda
+           kubectl delete pod <pod-tienda-backend> -n tienda
+           kubectl get pods -n tienda        # aparece el nuevo pod recreado
+  [FOTO] fotos/IE7_03_crud_ok.png
+         CRUD funcional en la web: alta/edición/baja de productos (Front→Back→DB).
+  [FOTO] fotos/IE7_04_redeploy.png
+         Recuperación post-redeploy: pods reemplazados tras un nuevo despliegue.
+         CMD (CloudShell):
+           kubectl get pods -n tienda -o wide   # antes/después: pods nuevos = rollout OK
+
+  NOTA SOBRE LA PERSISTENCIA DE DATOS (limitación conocida)
+  ---------------------------------------------------------
+  El Deployment de MySQL usa un volumen emptyDir, atado al ciclo de vida del pod,
+  por lo que la base de datos es efímera: cualquier reprogramación, borrado o
+  redeploy del pod tienda-db la reinicia desde cero, conservando solo los
+  productos semilla de la imagen y perdiendo los cambios hechos por CRUD en tiempo
+  de ejecución. Como el pipeline también aplica set image a la DB en cada push, la
+  demostración del CRUD debe realizarse después del último despliegue. El detalle
+  y la mejora futura propuesta se desarrollan en la sección "Problemas
+  encontrados y limitaciones".
+
+
+================================================================================
+ MEJORAS APLICADAS Y MEJORA CONTINUA
+================================================================================
+Sobre el proyecto base se aplicaron mejoras de estructura, seguridad y
+automatización:
+
+  • Estructura: se unificó todo en un monorepo (los repos entregados eran
+    idénticos), de modo que GitHub Actions detecta el workflow; el material del
+    profesor se archivó en docs_profesor/.
+  • Código: se corrigió server.js (DB_HOST sin comillas → referencia inválida).
+  • Seguridad (IE5): se quitaron contraseñas horneadas en db/Dockerfile y el
+    mysql-secret.yaml versionado; ahora el Secret se genera en el pipeline desde
+    GitHub Secrets.
+  • Red (IE1/IE2): diseño de producción (nodos privados + NAT + ELB en públicas)
+    y etiquetado de subredes para el balanceo; se reemplazaron las anotaciones del
+    AWS LB Controller (no disponible en Learner Lab) por un Classic ELB.
+  • CI/CD (IE4): pipeline que usa el Environment production, genera el Secret de
+    MySQL, despliega también la imagen de la DB y etiqueta imágenes con SHA +
+    latest; el Metrics Server ya no se instala desde el pipeline (solo se
+    verifica), eliminando el conflicto que dejaba el HPA en <unknown>.
+
+
+================================================================================
+ PROBLEMAS ENCONTRADOS Y LIMITACIONES
+================================================================================
+
+  PROBLEMA                                  SOLUCIÓN
+  ----------------------------------------  --------------------------------------
+  HPA en "<unknown>" y kubectl top sin      Conflicto entre el metrics-server de
+  métricas.                                 upstream y el complemento del EKS; se
+                                            quitó la instalación del pipeline y se
+                                            dejó solo el complemento gestionado.
+
+  Credenciales del Learner Lab que rotan    Secrets en GitHub Environment + aws
+  cada sesión.                              eks update-kubeconfig al inicio de cada
+                                            sesión.
+
+  type: LoadBalancer requería AWS LB        Se usó un Classic ELB (Service
+  Controller (no disponible).               LoadBalancer sin anotaciones del
+                                            controller).
+
+  Contraseñas versionadas en db/Dockerfile  Se eliminaron del repo; el Secret de
+  y mysql-secret.yaml.                       MySQL se genera en el pipeline desde
+                                            GitHub Secrets.
+
+  LIMITACIÓN CONOCIDA: PERSISTENCIA EFÍMERA DE LA BASE DE DATOS
+  ------------------------------------------------------------
+  El Deployment de MySQL (k8s/mysql-deployment.yaml) monta un volumen
+  emptyDir: {} en /var/lib/mysql. Un emptyDir está atado al ciclo de vida del pod
+  —no del contenedor—, por lo que la base de datos es efímera: si el pod tienda-db
+  se borra, se reprograma a otro nodo, o se realiza un redeploy/rollout
+  (kubectl set image), el volumen se destruye y MySQL se reinicializa desde cero.
+
+  Tras un reinicio del pod solo se recuperan los productos "semilla" horneados en
+  la imagen tienda-db (productos 1–5); se pierden los cambios realizados en tiempo
+  de ejecución (altas, ediciones y bajas vía CRUD). La consecuencia operativa es
+  relevante para la demo: dado que el pipeline CI/CD aplica set image también a la
+  DB en cada push, cada despliegue reinicia la base de datos, por lo que el CRUD
+  debe ejecutarse después del último deploy.
+
+  Esta decisión es intencional dado el contexto de laboratorio (AWS Academy
+  Learner Lab), donde se priorizó la simplicidad y el ahorro de créditos por sobre
+  la persistencia. La superación de esta limitación se detalla en la sección de
+  Conclusiones y mejora continua.
+
+
+================================================================================
+ 5. CONCLUSIÓN
+================================================================================
+La solución implementada cumple con los objetivos de negocio de Tienda Perritos y
+con los siete indicadores del encargo. La aplicación quedó orquestada en AWS EKS
+sobre una arquitectura de producción (2 AZ, nodos privados, ELB público) que
+aporta alta disponibilidad y seguridad por defensa en capas.
+
+La automatización del ciclo de vida con GitHub Actions eliminó los despliegues
+manuales: un simple commit a main reconstruye, publica y despliega la aplicación
+en ~2 minutos, con recuperación sin downtime gracias a los rollouts de
+Kubernetes. La escalabilidad quedó demostrada con el HPA, que escaló el backend
+de 2 a 10 réplicas ante una carga real y volvió a su estado base al cesar la
+demanda. La seguridad de credenciales se resolvió sacando todo secreto del código
+y centralizándolo en un GitHub Environment, generando el Secret de Kubernetes en
+tiempo de despliegue.
+
+En cuanto a mejora continua, la prioridad más relevante es dotar de persistencia
+a la base de datos, hoy efímera por el uso de emptyDir. La recomendación es
+reemplazar ese volumen por un PersistentVolumeClaim (PVC) respaldado por Amazon
+EBS —lo que requiere instalar el addon aws-ebs-csi-driver— y, idealmente, migrar
+el Deployment de MySQL a un StatefulSet, que aporta identidad de red y
+almacenamiento estables para cargas con estado. Como alternativa de producción,
+lo más robusto sería desacoplar la base de datos del clúster empleando un servicio
+gestionado como Amazon RDS for MySQL.
+
+Otros pasos naturales son: incorporar un Cluster Autoscaler para escalar también
+los nodos EC2; añadir HTTPS/Ingress con un certificado ACM y un dominio propio en
+Route 53; sumar pruebas automatizadas al pipeline antes del deploy; y desplegar un
+NAT Gateway por AZ para eliminar ese punto único de fallo en un entorno realmente
+productivo. En conjunto, el proyecto evidencia competencias integrales de DevOps:
+automatizar, desplegar y optimizar software en un entorno de nube real aplicando
+buenas prácticas profesionales.
+
+================================================================================

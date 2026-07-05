@@ -1,0 +1,21 @@
+# ===== Credenciales / variables de entorno (NUNCA subir al repo) =====
+.env
+.env.*
+!.env.example
+
+# ===== Node =====
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# ===== Kubeconfig / credenciales AWS locales =====
+kubeconfig
+*.kubeconfig
+.aws/
+
+# ===== Sistema operativo / editores =====
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/

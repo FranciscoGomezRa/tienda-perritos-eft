@@ -1,0 +1,232 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 1660" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="12" markerHeight="12" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L9,3.5 L0,7 Z" fill="#555"/>
+    </marker>
+    <marker id="arrG" markerWidth="12" markerHeight="12" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L9,3.5 L0,7 Z" fill="#2e7d32"/>
+    </marker>
+    <marker id="arrB" markerWidth="12" markerHeight="12" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L9,3.5 L0,7 Z" fill="#1565c0"/>
+    </marker>
+    <marker id="arrP" markerWidth="12" markerHeight="12" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L9,3.5 L0,7 Z" fill="#6e40c9"/>
+    </marker>
+    <marker id="arrO" markerWidth="12" markerHeight="12" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L9,3.5 L0,7 Z" fill="#d35400"/>
+    </marker>
+    <marker id="arrR" markerWidth="12" markerHeight="12" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L9,3.5 L0,7 Z" fill="#c0392b"/>
+    </marker>
+    <style>
+      .t-title{font-size:25px;font-weight:700;fill:#1a1a2e;text-anchor:middle}
+      .t-sub{font-size:14px;fill:#555;text-anchor:middle}
+      .lane-lbl{font-size:16px;font-weight:700}
+      .box-t{font-size:14px;font-weight:700;fill:#1a1a2e}
+      .box-s{font-size:12px;fill:#333}
+      .box-xs{font-size:10.8px;fill:#444}
+      .edge{font-size:11.5px;fill:#444}
+      .edge-b{font-size:11.5px;font-weight:700}
+      .ctr{text-anchor:middle}
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1120" height="1660" fill="#ffffff"/>
+
+  <!-- ===== Encabezado ===== -->
+  <text class="t-title" x="560" y="38">Arquitectura — CI/CD + AWS EKS + HPA · Tienda Perritos</text>
+  <text class="t-sub" x="560" y="62">Patrón de producción · us-east-1 · cuenta 268450856324 · clúster tienda-eks (K8s 1.35)</text>
+
+  <!-- ===== Carril CI/CD ===== -->
+  <rect x="40" y="84" width="1040" height="150" rx="12" fill="#f6f0ff" stroke="#6e40c9" stroke-width="2"/>
+  <text class="lane-lbl" x="58" y="108" fill="#6e40c9">1 · CI/CD — GitHub Actions</text>
+
+  <rect x="70" y="124" width="180" height="92" rx="8" fill="#ffffff" stroke="#6e40c9" stroke-width="1.5"/>
+  <text class="box-t ctr" x="160" y="158">Desarrollador</text>
+  <text class="box-s ctr" x="160" y="180">git push</text>
+  <text class="box-s ctr" x="160" y="198">rama main</text>
+
+  <rect x="300" y="120" width="430" height="100" rx="8" fill="#ffffff" stroke="#6e40c9" stroke-width="1.5"/>
+  <text class="box-t ctr" x="515" y="150">GitHub Actions · job build-and-deploy</text>
+  <text class="box-s ctr" x="515" y="172">Environment: production</text>
+  <text class="box-xs ctr" x="515" y="192">7 secrets: AWS_ACCESS_KEY_ID · SECRET · SESSION_TOKEN · REGION</text>
+  <text class="box-xs ctr" x="515" y="209">EKS_CLUSTER_NAME · EKS_NAMESPACE · MYSQL_ROOT_PASSWORD</text>
+
+  <rect x="780" y="120" width="290" height="100" rx="8" fill="#ffffff" stroke="#6e40c9" stroke-width="1.5"/>
+  <text class="box-t ctr" x="925" y="148">Pasos del pipeline</text>
+  <text class="box-s ctr" x="925" y="170">docker build ×3 → push ECR</text>
+  <text class="box-s ctr" x="925" y="190">aws eks update-kubeconfig</text>
+  <text class="box-xs ctr" x="925" y="208">kubectl apply / set image (ns, secret, deploys, HPA)</text>
+
+  <line x1="250" y1="170" x2="298" y2="170" stroke="#6e40c9" stroke-width="2" marker-end="url(#arrP)"/>
+  <line x1="730" y1="170" x2="778" y2="170" stroke="#6e40c9" stroke-width="2" marker-end="url(#arrP)"/>
+
+  <!-- ===== AWS Cloud ===== -->
+  <rect x="40" y="260" width="1040" height="1240" rx="14" fill="#fff8f0" stroke="#ff9900" stroke-width="2.5"/>
+  <text class="lane-lbl" x="60" y="286" fill="#d35400">AWS Cloud · us-east-1</text>
+
+  <!-- A) ECR -->
+  <rect x="130" y="316" width="570" height="80" rx="8" fill="#fdf2e9" stroke="#d35400" stroke-width="1.8"/>
+  <text class="box-t ctr" x="415" y="346">Amazon ECR — 3 repos privados (AES-256)</text>
+  <text class="box-s ctr" x="415" y="370">tienda-frontend · tienda-backend · tienda-db</text>
+  <text class="box-xs ctr" x="415" y="388">imágenes etiquetadas por SHA + latest</text>
+
+  <!-- B) Control plane -->
+  <rect x="130" y="438" width="570" height="100" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.8"/>
+  <text class="box-t ctr" x="415" y="466">Plano de control EKS · tienda-eks (K8s 1.35)</text>
+  <text class="box-s ctr" x="415" y="489">endpoint público y privado · gestionado por AWS</text>
+  <text class="box-xs ctr" x="415" y="510">add-ons: CoreDNS · kube-proxy · VPC CNI · Metrics Server</text>
+  <text class="box-xs ctr" x="415" y="528">recibe los kubectl apply del pipeline</text>
+
+  <!-- C) VPC -->
+  <rect x="130" y="560" width="570" height="330" rx="10" fill="#f0f4ff" stroke="#3f51b5" stroke-width="2" stroke-dasharray="7 5"/>
+  <text class="lane-lbl" x="150" y="586" fill="#3f51b5">VPC tienda-vpc · 10.0.0.0/16 · 2 AZ</text>
+
+  <rect x="150" y="600" width="150" height="54" rx="7" fill="#e9f7ec" stroke="#2e7d32" stroke-width="1.5"/>
+  <text class="box-t ctr" x="225" y="626">Internet Gateway</text>
+  <text class="box-xs ctr" x="225" y="644">entrada/salida VPC</text>
+
+  <rect x="320" y="600" width="150" height="54" rx="7" fill="#e9f7ec" stroke="#2e7d32" stroke-width="1.5"/>
+  <text class="box-t ctr" x="395" y="626">NAT Gateway (1)</text>
+  <text class="box-xs ctr" x="395" y="644">subred pública</text>
+
+  <rect x="500" y="596" width="185" height="66" rx="7" fill="#e9f7ec" stroke="#2e7d32" stroke-width="2"/>
+  <text class="box-t ctr" x="592" y="622">Classic ELB (público)</text>
+  <text class="box-s ctr" x="592" y="644">:80 · subredes públicas (2 AZ)</text>
+
+  <rect x="150" y="690" width="535" height="172" rx="8" fill="#e8f1fb" stroke="#1565c0" stroke-width="1.8"/>
+  <text class="box-t" x="168" y="714" fill="#1565c0">Subredes privadas (4 · 2 por AZ) — nodos sin IP pública</text>
+  <rect x="175" y="726" width="235" height="92" rx="7" fill="#ffffff" stroke="#1565c0" stroke-width="1.5"/>
+  <text class="box-t ctr" x="292" y="754">Nodo EC2 (privado)</text>
+  <text class="box-s ctr" x="292" y="776">t3.medium · AL2023</text>
+  <text class="box-xs ctr" x="292" y="796">kubelet · corre pods</text>
+  <rect x="430" y="726" width="235" height="92" rx="7" fill="#ffffff" stroke="#1565c0" stroke-width="1.5"/>
+  <text class="box-t ctr" x="547" y="754">Nodo EC2 (privado)</text>
+  <text class="box-s ctr" x="547" y="776">t3.medium · AL2023</text>
+  <text class="box-xs ctr" x="547" y="796">kubelet · corre pods</text>
+  <text class="box-xs" x="168" y="838" fill="#1565c0">node group tienda-nodes · deseado 2 / mín 2 / máx 4   ·   Cluster Autoscaler: mejora futura (no implementada)</text>
+
+  <!-- D) Namespace tienda -->
+  <rect x="130" y="922" width="570" height="498" rx="10" fill="#eef3fd" stroke="#326ce5" stroke-width="2"/>
+  <text class="lane-lbl" x="150" y="948" fill="#326ce5">Clúster EKS · Namespace: tienda (pods sobre los nodos privados)</text>
+
+  <!-- frontend -->
+  <rect x="195" y="962" width="440" height="42" rx="7" fill="#e9f7ec" stroke="#2e7d32" stroke-width="1.6"/>
+  <text class="box-t ctr" x="415" y="988">Service tienda-frontend · LoadBalancer :80</text>
+  <rect x="195" y="1014" width="440" height="74" rx="7" fill="#ffffff" stroke="#326ce5" stroke-width="1.5"/>
+  <text class="box-t ctr" x="415" y="1040">Deployment tienda-frontend — Nginx + JS</text>
+  <text class="box-s ctr" x="415" y="1062">2 réplicas · :80 · req 50m / lim 300m CPU</text>
+  <text class="box-xs ctr" x="415" y="1080">readiness/liveness probe /</text>
+
+  <!-- backend -->
+  <rect x="195" y="1118" width="440" height="42" rx="7" fill="#eef3fd" stroke="#326ce5" stroke-width="1.6"/>
+  <text class="box-t ctr" x="415" y="1144">Service tienda-backend · ClusterIP :3001</text>
+  <rect x="195" y="1170" width="440" height="74" rx="7" fill="#ffffff" stroke="#326ce5" stroke-width="1.5"/>
+  <text class="box-t ctr" x="415" y="1196">Deployment tienda-backend — Node / Express</text>
+  <text class="box-s ctr" x="415" y="1218">2 réplicas · :3001 · req 100m / lim 500m CPU</text>
+  <text class="box-xs ctr" x="415" y="1236">probe /api/health</text>
+
+  <!-- db -->
+  <rect x="195" y="1274" width="440" height="42" rx="7" fill="#eef3fd" stroke="#326ce5" stroke-width="1.6"/>
+  <text class="box-t ctr" x="415" y="1300">Service tienda-db · headless :3306</text>
+  <rect x="195" y="1326" width="440" height="74" rx="7" fill="#ffffff" stroke="#326ce5" stroke-width="1.5"/>
+  <text class="box-t ctr" x="415" y="1352">Deployment tienda-db — MySQL</text>
+  <text class="box-s ctr" x="415" y="1374">1 réplica · :3306 · volumen emptyDir</text>
+  <text class="box-xs ctr" x="415" y="1392">BD tienda_perritos</text>
+
+  <!-- ===== Columna derecha: Usuario, HPA, Metrics ===== -->
+  <rect x="735" y="600" width="195" height="62" rx="8" fill="#ffffff" stroke="#333" stroke-width="1.5"/>
+  <text class="box-t ctr" x="832" y="626">Usuario final</text>
+  <text class="box-xs ctr" x="832" y="646">navegador → DNS del ELB</text>
+
+  <rect x="720" y="1014" width="185" height="74" rx="8" fill="#fff7e6" stroke="#e8a200" stroke-width="1.6"/>
+  <text class="box-t ctr" x="812" y="1042">HPA frontend</text>
+  <text class="box-s ctr" x="812" y="1064">CPU 60%</text>
+  <text class="box-s ctr" x="812" y="1082">réplicas 2 → 6</text>
+
+  <rect x="720" y="1170" width="185" height="74" rx="8" fill="#fff7e6" stroke="#e8a200" stroke-width="1.6"/>
+  <text class="box-t ctr" x="812" y="1198">HPA backend</text>
+  <text class="box-s ctr" x="812" y="1220">CPU 70%</text>
+  <text class="box-s ctr" x="812" y="1238">réplicas 2 → 10</text>
+
+  <rect x="935" y="1078" width="135" height="102" rx="8" fill="#fdf2e9" stroke="#d35400" stroke-width="1.6"/>
+  <text class="box-t ctr" x="1002" y="1106">Metrics</text>
+  <text class="box-t ctr" x="1002" y="1124">Server</text>
+  <text class="box-xs ctr" x="1002" y="1146">kube-system</text>
+  <text class="box-xs ctr" x="1002" y="1164">métricas CPU</text>
+
+  <!-- Secret a la izquierda del namespace -->
+  <rect x="50" y="1230" width="120" height="100" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+  <text class="box-t ctr" x="110" y="1258">Secret</text>
+  <text class="box-s ctr" x="110" y="1278">mysql-secret</text>
+  <text class="box-xs ctr" x="110" y="1298">creado en el</text>
+  <text class="box-xs ctr" x="110" y="1314">pipeline (IE5)</text>
+
+  <!-- ====================== CONEXIONES ====================== -->
+  <!-- CI/CD lane -> ECR (docker push) -->
+  <path d="M515,220 C515,265 460,290 425,314" fill="none" stroke="#d35400" stroke-width="2.2" marker-end="url(#arrO)"/>
+  <text class="edge-b" x="430" y="285" fill="#d35400">docker push ×3</text>
+  <!-- pasos -> control plane (kubectl) -->
+  <path d="M925,220 C925,360 760,430 702,470" fill="none" stroke="#c0392b" stroke-width="2.2" marker-end="url(#arrR)"/>
+  <text class="edge-b" x="800" y="320" fill="#c0392b">kubectl / kubeconfig</text>
+
+  <!-- ECR -> control plane (spine) -->
+  <line x1="415" y1="396" x2="415" y2="436" stroke="#555" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- control plane -> VPC (spine) -->
+  <line x1="415" y1="538" x2="415" y2="558" stroke="#555" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- ECR -> nodos (pull image) por margen izquierdo -->
+  <path d="M130,360 C95,360 90,360 90,400 L90,752 C90,772 120,776 173,776" fill="none" stroke="#d35400" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#arrO)"/>
+  <text class="edge" x="78" y="560" fill="#d35400" transform="rotate(-90 78 560)">pull image (vía NAT → IGW)</text>
+
+  <!-- control plane -> nodos (gestiona) margen izquierdo interno -->
+  <path d="M130,500 C118,500 116,500 116,520 L116,742 C116,760 140,752 173,752" fill="none" stroke="#c0392b" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arrR)"/>
+  <text class="edge" x="104" y="640" fill="#c0392b" transform="rotate(-90 104 640)">gestiona nodos</text>
+
+  <!-- VPC -> namespace (spine) -->
+  <line x1="415" y1="890" x2="415" y2="920" stroke="#555" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- Usuario -> ELB -->
+  <line x1="733" y1="631" x2="689" y2="631" stroke="#2e7d32" stroke-width="2.4" marker-end="url(#arrG)"/>
+  <text class="edge-b" x="694" y="688" fill="#2e7d32">HTTP :80</text>
+
+  <!-- ELB -> Service frontend (baja por la derecha) -->
+  <path d="M685,648 L697,648 L697,983 L637,983" fill="none" stroke="#2e7d32" stroke-width="2.4" marker-end="url(#arrG)"/>
+  <text class="edge-b" x="704" y="815" fill="#2e7d32">tráfico → frontend</text>
+
+  <!-- flujo interno request (spine vertical) -->
+  <line x1="415" y1="1004" x2="415" y2="1012" stroke="#2e7d32" stroke-width="2" marker-end="url(#arrG)"/>
+  <line x1="415" y1="1088" x2="415" y2="1116" stroke="#326ce5" stroke-width="2" marker-end="url(#arrB)"/>
+  <text class="edge-b" x="425" y="1106" fill="#326ce5">/api :3001</text>
+  <line x1="415" y1="1160" x2="415" y2="1168" stroke="#2e7d32" stroke-width="2" marker-end="url(#arrG)"/>
+  <line x1="415" y1="1244" x2="415" y2="1272" stroke="#326ce5" stroke-width="2" marker-end="url(#arrB)"/>
+  <text class="edge-b" x="425" y="1262" fill="#326ce5">:3306</text>
+  <line x1="415" y1="1316" x2="415" y2="1324" stroke="#2e7d32" stroke-width="2" marker-end="url(#arrG)"/>
+
+  <!-- HPA -> deployments -->
+  <line x1="718" y1="1051" x2="637" y2="1051" stroke="#e8a200" stroke-width="2" marker-end="url(#arr)"/>
+  <text class="edge" x="648" y="1043" fill="#9a7400">escala</text>
+  <line x1="718" y1="1207" x2="637" y2="1207" stroke="#e8a200" stroke-width="2" marker-end="url(#arr)"/>
+  <text class="edge" x="648" y="1199" fill="#9a7400">escala</text>
+
+  <!-- Metrics -> HPA -->
+  <path d="M933,1100 C918,1080 908,1065 905,1055" fill="none" stroke="#d35400" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arrO)"/>
+  <path d="M933,1160 C918,1180 908,1195 905,1205" fill="none" stroke="#d35400" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arrO)"/>
+
+  <!-- Secret -> backend & db -->
+  <path d="M170,1255 C185,1240 188,1215 193,1207" fill="none" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrR)"/>
+  <path d="M170,1305 C185,1320 188,1352 193,1360" fill="none" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrR)"/>
+
+  <!-- ===== Leyenda ===== -->
+  <rect x="40" y="1440" width="1040" height="170" rx="10" fill="#f7f7fb" stroke="#999" stroke-width="1.3"/>
+  <text class="box-t" x="60" y="1466">Mapeo a indicadores (IE1–IE7)</text>
+  <text class="box-xs" x="60" y="1490">IE1 · Infraestructura EKS (VPC + node group)</text>
+  <text class="box-xs" x="430" y="1490">IE2 · ELB + URL pública</text>
+  <text class="box-xs" x="730" y="1490">IE3 · Autoscaling con HPA</text>
+  <text class="box-xs" x="60" y="1512">IE4 · Pipeline CI/CD (GitHub Actions)</text>
+  <text class="box-xs" x="430" y="1512">IE5 · Secrets / Environment</text>
+  <text class="box-xs" x="730" y="1512">IE6 · Logs (kubectl / CloudWatch)</text>
+  <text class="box-xs" x="60" y="1534">IE7 · CRUD + autorrecuperación de pods</text>
+  <text class="box-xs" x="60" y="1568" fill="#888">Líneas sólidas = tráfico / flujo de despliegue   ·   líneas punteadas = relaciones de control y datos</text>
+  <text class="box-xs" x="60" y="1588" fill="#888">Flujo de usuario: Usuario → ELB :80 → Service frontend → pods frontend → Service backend :3001 → pods backend → Service db :3306 → MySQL</text>
+</svg>

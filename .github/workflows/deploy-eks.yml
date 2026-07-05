@@ -1,0 +1,167 @@
+name: CI/CD Tienda Perritos EKS
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+env:
+  # Nombres de los repositorios de ECR (no son secretos)
+  ECR_REPO_FRONTEND: tienda-frontend
+  ECR_REPO_BACKEND: tienda-backend
+  ECR_REPO_DB: tienda-db
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    # Los secrets (AWS + BD) viven en el Environment 'production'.
+    # Solo se exponen a este job porque lo declara explícitamente (refuerza IE5).
+    environment: production
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+
+      - name: Login a Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Definir tag de imagen
+        run: echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      # ========== BUILD & PUSH DE IMÁGENES A ECR ==========
+      - name: Build & push FRONTEND
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          cd frontend
+          docker build -t $ECR_REGISTRY/${ECR_REPO_FRONTEND}:${IMAGE_TAG} -t $ECR_REGISTRY/${ECR_REPO_FRONTEND}:latest .
+          docker push $ECR_REGISTRY/${ECR_REPO_FRONTEND}:${IMAGE_TAG}
+          docker push $ECR_REGISTRY/${ECR_REPO_FRONTEND}:latest
+
+      - name: Build & push BACKEND
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          cd backend
+          docker build -t $ECR_REGISTRY/${ECR_REPO_BACKEND}:${IMAGE_TAG} -t $ECR_REGISTRY/${ECR_REPO_BACKEND}:latest .
+          docker push $ECR_REGISTRY/${ECR_REPO_BACKEND}:${IMAGE_TAG}
+          docker push $ECR_REGISTRY/${ECR_REPO_BACKEND}:latest
+
+      - name: Build & push DB
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          cd db
+          docker build -t $ECR_REGISTRY/${ECR_REPO_DB}:${IMAGE_TAG} -t $ECR_REGISTRY/${ECR_REPO_DB}:latest .
+          docker push $ECR_REGISTRY/${ECR_REPO_DB}:${IMAGE_TAG}
+          docker push $ECR_REGISTRY/${ECR_REPO_DB}:latest
+
+      # ========== KUBECTL + KUBECONFIG ==========
+      - name: Instalar kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.29.0
+
+      - name: Configurar kubeconfig para EKS
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+        run: |
+          aws eks update-kubeconfig --region "$AWS_REGION" --name "$EKS_CLUSTER_NAME"
+          kubectl config current-context
+
+      # ========== NAMESPACE ==========
+      - name: Aplicar namespace
+        run: kubectl apply -f k8s/namespace.yaml
+
+      # ========== SECRET DE MYSQL (generado desde GitHub Secrets) ==========
+      # No se versiona ninguna contraseña: el Secret se crea aquí a partir del
+      # secret 'MYSQL_ROOT_PASSWORD' del Environment. (Requisito IE5)
+      - name: Crear/actualizar Secret de MySQL
+        env:
+          EKS_NAMESPACE: ${{ secrets.EKS_NAMESPACE }}
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+        run: |
+          kubectl create secret generic mysql-secret \
+            --from-literal=MYSQL_ROOT_PASSWORD="$MYSQL_ROOT_PASSWORD" \
+            -n "$EKS_NAMESPACE" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      # ========== BASE DE DATOS ==========
+      - name: Desplegar BASE DE DATOS (MySQL) en EKS
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          EKS_NAMESPACE: ${{ secrets.EKS_NAMESPACE }}
+        run: |
+          kubectl apply -f k8s/mysql-deployment.yaml -n "$EKS_NAMESPACE"
+          kubectl apply -f k8s/mysql-service.yaml -n "$EKS_NAMESPACE"
+          kubectl set image deployment/tienda-db \
+            mysql=$ECR_REGISTRY/${ECR_REPO_DB}:${IMAGE_TAG} \
+            -n "$EKS_NAMESPACE"
+          kubectl rollout status deployment/tienda-db -n "$EKS_NAMESPACE"
+
+      # ========== BACKEND ==========
+      - name: Desplegar BACKEND en EKS
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          EKS_NAMESPACE: ${{ secrets.EKS_NAMESPACE }}
+        run: |
+          kubectl apply -f k8s/backend-deployment.yaml -n "$EKS_NAMESPACE"
+          kubectl apply -f k8s/backend-service.yaml -n "$EKS_NAMESPACE"
+          kubectl set image deployment/tienda-backend \
+            backend=$ECR_REGISTRY/${ECR_REPO_BACKEND}:${IMAGE_TAG} \
+            -n "$EKS_NAMESPACE"
+          kubectl rollout status deployment/tienda-backend -n "$EKS_NAMESPACE"
+
+      # ========== FRONTEND ==========
+      - name: Desplegar FRONTEND en EKS
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          EKS_NAMESPACE: ${{ secrets.EKS_NAMESPACE }}
+        run: |
+          kubectl apply -f k8s/frontend-deployment.yaml -n "$EKS_NAMESPACE"
+          kubectl apply -f k8s/frontend-service.yaml -n "$EKS_NAMESPACE"
+          kubectl set image deployment/tienda-frontend \
+            frontend=$ECR_REGISTRY/${ECR_REPO_FRONTEND}:${IMAGE_TAG} \
+            -n "$EKS_NAMESPACE"
+          kubectl rollout status deployment/tienda-frontend -n "$EKS_NAMESPACE"
+
+      # ========== METRICS SERVER (necesario para el HPA) ==========
+      # El Metrics Server se provee como COMPLEMENTO gestionado del clúster EKS
+      # (habilitado en el wizard de creación). NO se instala el manifiesto de
+      # upstream (components.yaml) porque su Service usa el selector 'k8s-app',
+      # que al hacer 'apply' se fusionaba con el Service del complemento (cuyos
+      # pods usan 'app.kubernetes.io/name') dejando el selector con un AND
+      # imposible -> MissingEndpoints -> Metrics API caída -> HPA en <unknown>.
+      # Aquí solo verificamos que la Metrics API esté disponible.
+      - name: Verificar Metrics Server (para HPA)
+        run: |
+          kubectl get apiservices v1beta1.metrics.k8s.io
+          kubectl wait --for=condition=Available --timeout=120s \
+            apiservices/v1beta1.metrics.k8s.io || true
+
+      # ========== AUTOSCALING (HPA) ==========
+      - name: Aplicar HPA
+        env:
+          EKS_NAMESPACE: ${{ secrets.EKS_NAMESPACE }}
+        run: |
+          if [ -f k8s/backend-hpa.yaml ]; then kubectl apply -f k8s/backend-hpa.yaml -n "$EKS_NAMESPACE"; fi
+          if [ -f k8s/frontend-hpa.yaml ]; then kubectl apply -f k8s/frontend-hpa.yaml -n "$EKS_NAMESPACE"; fi
+
+      # ========== ESTADO FINAL ==========
+      - name: Ver pods, servicios y HPA
+        env:
+          EKS_NAMESPACE: ${{ secrets.EKS_NAMESPACE }}
+        run: |
+          kubectl get pods -n "$EKS_NAMESPACE" -o wide
+          kubectl get svc -n "$EKS_NAMESPACE"
+          kubectl get hpa -n "$EKS_NAMESPACE" || true
