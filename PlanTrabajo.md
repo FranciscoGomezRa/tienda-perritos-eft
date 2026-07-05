@@ -5,9 +5,10 @@
 > **Cuando preguntes "¿en qué parte vamos?", la respuesta sale de aquí.**
 > Estados: ✅ hecho · 🔄 en curso · ⬜ pendiente. El checklist de requisitos vive en [PautaExamen.md](PautaExamen.md).
 
-**Última actualización:** 2026-07-05 — Fases A y B COMPLETAS en local (solo falta A4: crear el repo en GitHub y pushear).
-Stack compose verificado: 7/7 tests verdes, CRUD OK en localhost:8080, backend non-root.
-📸 Pendientes de esta sesión: `IE2_compose_up.png`, `IE2_app_local.png`, `IE3_npm_test_local.png`.
+**Última actualización:** 2026-07-05 — Fases A y B COMPLETAS y **pusheadas** a GitHub
+(repo público `tienda-perritos-eft`, 8 commits). Las 3 fotos del entorno local capturadas.
+El push disparó el pipeline: job `test` debe salir VERDE; `build-and-deploy` FALLA (esperado, sin AWS aún).
+**SIGUIENTE:** revisar la corrida en Actions + 📸 evidencia del job test verde → Fase C (infra AWS desde 0).
 
 ---
 
@@ -18,7 +19,7 @@ Stack compose verificado: 7/7 tests verdes, CRUD OK en localhost:8080, backend n
 | A1 | Copiar base reutilizable desde Prueba3 (código, k8s, workflow, fotos, informe TXT) | ✅ | — | — |
 | A2 | Crear `PautaExamen.md` + `PlanTrabajo.md` | ✅ | — | — |
 | A3 | `git init` + commit inicial `feat(app): base tienda perritos (frontend+backend+db+k8s)` — `154ed23` | ✅ | §Repositorio | — |
-| A4 | Usuario crea repo GitHub **público** `tienda-perritos-eft` → `git remote add origin` → push | 🔄 | §Repositorio | 📸 luego (estructura repo/commits, para IE1) |
+| A4 | Repo GitHub público `tienda-perritos-eft` creado + push exitoso (8 commits, HEAD `83225d4`). Fotos IE2_compose_up/IE2_app_local/IE3_npm_test_local ya en `fotos/` | ✅ | §Repositorio | 📸 luego (estructura repo/commits, para IE1) |
 | A5 | Adaptar `README.md` al EFT | ✅ | — | — |
 
 **Commits planificados (IE1 evalúa el historial — uno por etapa, convención `tipo(área): descripción`):**
