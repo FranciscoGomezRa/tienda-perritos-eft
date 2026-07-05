@@ -449,6 +449,61 @@ servicio.
 
 
 ================================================================================
+ ROLES DE DOCKER COMPOSE, ECR Y EKS EN LA SOLUCIÓN (EFT)
+================================================================================
+Durante el diseño del EFT surgió una pregunta legítima que conviene responder
+explícitamente, porque delimita el rol de cada pieza de la arquitectura:
+
+  PREGUNTA: ¿Docker Compose se utiliza como una alternativa de respaldo a ECR?
+
+  RESPUESTA: No. Compose y ECR no compiten entre sí porque resuelven problemas
+  distintos. Los tres roles quedan así:
+
+  PIEZA            ROL                                          DÓNDE VIVE
+  ---------------  -------------------------------------------  ----------
+  Docker Compose   Orquestación del entorno de desarrollo       PC local
+                   LOCAL: levanta los 3 contenedores (frontend,
+                   backend, db) con red interna, healthcheck de
+                   MySQL y volumen, para desarrollar y probar
+                   antes de tocar la nube.
+  Amazon ECR       Registro de imágenes: la "bodega" donde el   AWS
+                   pipeline publica las imágenes construidas,
+                   con tags (SHA + latest) para trazabilidad.
+                   (La alternativa a ECR según la pauta sería
+                   Docker Hub; se eligió ECR.)
+  Amazon EKS       Orquestación de PRODUCCIÓN: corre esos       AWS
+                   mismos contenedores en la nube con escalado
+                   (HPA), balanceo (ELB) y autorrecuperación.
+
+  Compose no es un plan B: es un requisito propio del EFT. La rúbrica IE2 exige
+  "un archivo Docker Compose que define y levanta perfectamente todos los
+  servicios (frontend, backend, BD), redes y volúmenes para el entorno de
+  desarrollo", y el checklist de la presentación pide "demostrar cómo levanta
+  el entorno de desarrollo localmente". El flujo completo de la solución es:
+
+    Desarrollo local (docker compose) -> push a GitHub -> pipeline
+    (test -> build -> scan) -> publica en ECR -> despliega en EKS (producción)
+
+  Compose es el primer eslabón de esa cadena. Decisión de diseño clave: los
+  servicios del compose usan los MISMOS nombres DNS que los Services de
+  Kubernetes (tienda-db, tienda-backend, tienda-frontend), por lo que el mismo
+  artefacto corre sin cambios en local y en producción (el proxy de nginx y el
+  backend no distinguen el entorno).
+
+  Uso secundario (respaldo DE LA DEMO, no de ECR): si el día de la defensa el
+  Learner Lab no estuviera disponible, el compose permite demostrar la
+  aplicación completa funcionando en vivo desde la máquina local.
+
+  [FOTO] fotos/IE2_compose_up.png
+    (docker compose ps con los 3 servicios Up y la BD healthy)
+  [FOTO] fotos/IE2_app_local.png
+    (aplicación con productos en http://localhost:8080)
+  [FOTO] fotos/IE3_npm_test_local.png
+    (npm test con los 7 tests verdes — la BD se mockea, por eso corren sin
+    infraestructura y son la primera compuerta del pipeline)
+
+
+================================================================================
  MEJORAS APLICADAS Y MEJORA CONTINUA
 ================================================================================
 Sobre el proyecto base se aplicaron mejoras de estructura, seguridad y
