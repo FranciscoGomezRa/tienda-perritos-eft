@@ -5,7 +5,7 @@
 # Así, aunque el frontend (u otro pod comprometido) intente conectarse a la BD,
 # el tráfico se descarta.
 #
-# REQUISITO EKS: el add-on "Amazon VPC CNI" debe tener habilitado el
+# REQUISITOo EKS: el add-on "Amazon VPC CNI" debe tener habilitado el
 # enforcement de Network Policy (Enable Network Policy = ON). Sin eso, el
 # manifiesto se acepta pero NO se aplica.
 apiVersion: networking.k8s.io/v1
