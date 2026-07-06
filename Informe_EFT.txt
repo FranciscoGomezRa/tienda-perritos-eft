@@ -1,16 +1,16 @@
 ================================================================================
- INFORME — EVALUACIÓN PARCIAL N°3
- CI/CD con Autoscaling y Load Balancer en AWS EKS — Aplicación "Tienda Perritos"
+ INFORME — EXAMEN FINAL TRANSVERSAL (EFT)
+ CI/CD con Contenedores, Autoescalado y Balanceo de Carga en AWS EKS
+ Aplicación "Tienda Perritos"
  Asignatura: Introducción a Herramientas DevOps (ISY1101) — Duoc UC
  Escuela de Informática y Telecomunicaciones
 ================================================================================
 
 Instituto           : Duoc UC
-Asignatura          : Introducción a Herramientas DevOps
+Asignatura          : Introducción a Herramientas DevOps (ISY1101)
 Docente             : Rafael Videla
 Integrantes (dupla) : Francisco Gómez Ramos  ·  Benjamin Aravena Rosales
-Fecha               : 28 / 06 / 2026
-Repositorio GitHub  : github.com/FranciscoGomezRa/tienda-perritos-eks
+Repositorio GitHub  : github.com/FranciscoGomezRa/tienda-perritos-eft  (público)
 Región AWS / Clúster: us-east-1 / tienda-eks        Namespace: tienda
 
 Nota (1): Documento elaborado con apoyo de una herramienta de inteligencia
@@ -22,231 +22,363 @@ ejecutados y verificados por los integrantes.
 --------------------------------------------------------------------------------
  1. INTRODUCCIÓN
 --------------------------------------------------------------------------------
-El presente informe documenta el desarrollo de la Evaluación Parcial N°3 de la
-asignatura Introducción a Herramientas DevOps (ISY1101), cuyo propósito es llevar
-la aplicación web «Tienda Perritos» —una tienda en línea de productos para
+El presente informe documenta el desarrollo del Examen Final Transversal (EFT)
+de la asignatura Introducción a Herramientas DevOps (ISY1101), cuyo propósito es
+llevar la aplicación web «Tienda Perritos» —una tienda en línea de productos para
 mascotas compuesta por un frontend (Nginx + JavaScript), un backend
-(Node.js / Express) y una base de datos MySQL— hacia un entorno de orquestación
-de contenedores productivo en la nube.
+(Node.js / Express) y una base de datos MySQL— desde el desarrollo local
+contenedorizado hasta un entorno de orquestación de contenedores productivo en la
+nube.
 
-Para lograrlo se implementó un clúster de Kubernetes gestionado en AWS EKS, un
-pipeline de integración y despliegue continuo (CI/CD) con GitHub Actions que
-automatiza el ciclo build → push → deploy, autoescalado horizontal de réplicas
-(HPA) y balanceo de carga mediante un Elastic Load Balancer. El objetivo es
-demostrar despliegue automatizado, escalabilidad, alta disponibilidad, gestión
-segura de credenciales y observabilidad.
+Para lograrlo se implementó: un entorno de desarrollo local con Docker Compose;
+imágenes de contenedor minimalistas (Dockerfile multietapa, usuario sin
+privilegios); un pipeline de integración y despliegue continuo (CI/CD) con GitHub
+Actions que ejecuta el ciclo test → build → escaneo → push → deploy; un registro
+privado de imágenes en Amazon ECR; un clúster de Kubernetes gestionado en AWS EKS
+con autoescalado horizontal de réplicas (HPA) y balanceo de carga mediante un
+Elastic Load Balancer; gestión segura de credenciales; observabilidad; y controles
+de seguridad (escaneo de vulnerabilidades con Trivy y aislamiento de red de la base
+de datos con una NetworkPolicy).
 
-El documento se organiza siguiendo los siete indicadores de evaluación del
-encargo (IE1 a IE7). Cada indicador se acompaña de su justificación técnica, la
-evidencia gráfica real capturada durante la ejecución del proyecto y los comandos
-de CloudShell asociados, de modo que cada criterio de la rúbrica quede respaldado
-por una prueba verificable.
+El informe se organiza en los NUEVE PUNTOS que el encargo exige justificar
+(sección 4). Cada punto presenta la implementación realizada, su justificación
+técnica y la evidencia gráfica real capturada durante la ejecución del proyecto,
+con los comandos de CloudShell asociados, de modo que cada criterio de la rúbrica
+quede respaldado por una prueba verificable.
+
+  MAPA PUNTOS DEL INFORME → INDICADORES DE LA RÚBRICA (encargo)
+  ------------------------------------------------------------
+  Los 9 puntos se relacionan con los indicadores del encargo así:
+    • IE1 (Versiones y arquitectura)      → puntos 1 y 4 (diagrama e integración)
+    • IE2 (Contenerización dev local)     → punto 2
+    • IE3 (Pipeline CI/CD)                → puntos 3 y 4
+    • IE4 (Despliegue y orquestación)     → puntos 5 y 9
+    • IE5 (Verificación y funcionalidad)  → puntos 1, 6 y 7
+    • Seguridad (transversal)             → punto 8
 
 
 --------------------------------------------------------------------------------
  2. CONTEXTO DEL CASO
 --------------------------------------------------------------------------------
-"Tienda Perritos" es un comercio electrónico dedicado a la venta de productos
-para mascotas. Tras haber contenedorizado su aplicación en etapas previas
-(Docker) y montar una infraestructura base en AWS, el negocio enfrenta un nuevo
+"Tienda Perritos" es un comercio electrónico dedicado a la venta de productos para
+mascotas. Tras contenedorizar su aplicación con Docker, el negocio enfrenta un
 desafío: su catálogo y su tráfico crecen, las campañas y los picos de demanda son
 cada vez más frecuentes, y una caída del sitio o un despliegue manual fallido se
 traducen directamente en ventas perdidas.
 
 Frente a este escenario, el equipo técnico debe evolucionar desde "contenedores
-que corren en una máquina" hacia una plataforma de orquestación productiva capaz
-de:
-  • ejecutar la aplicación de forma escalable, agregando o quitando réplicas
-    según la carga real;
+que corren en una máquina" hacia una plataforma de orquestación productiva capaz de:
+  • ejecutar la aplicación de forma escalable, agregando o quitando réplicas según
+    la carga real;
   • mantenerse altamente disponible y tolerante a fallos, repartiéndose en varias
     zonas de disponibilidad y autorrecuperándose ante la caída de un contenedor;
-  • automatizar por completo los despliegues desde GitHub, eliminando los pasos
-    manuales propensos a error;
+  • automatizar por completo los despliegues desde GitHub, con pruebas automáticas
+    y escaneo de seguridad antes de publicar, eliminando pasos manuales propensos a
+    error;
   • registrar logs y métricas para diagnosticar problemas y medir el desempeño;
-  • y proteger las credenciales sensibles (acceso a AWS y a la base de datos)
-    fuera del código fuente.
+  • y proteger las credenciales sensibles (acceso a AWS y a la base de datos) fuera
+    del código fuente.
 
-Este informe responde a ese contexto: presenta la arquitectura diseñada para
-Tienda Perritos sobre AWS EKS y demuestra, con evidencia, que la solución cumple
-cada uno de esos objetivos de negocio traducidos en los indicadores técnicos
-IE1 a IE7.
+Este informe responde a ese contexto: presenta la arquitectura diseñada para Tienda
+Perritos sobre AWS EKS y demuestra, con evidencia, que la solución cumple cada uno
+de esos objetivos de negocio.
 
 
 --------------------------------------------------------------------------------
- 3. PROPUESTA DE SOLUCIÓN
+ 3. PROPUESTA DE SOLUCIÓN (visión general)
 --------------------------------------------------------------------------------
-La solución propuesta orquesta los tres servicios de Tienda Perritos en un
-clúster Amazon EKS (tienda-eks, región us-east-1, namespace tienda), desplegando
-las imágenes desde un registro privado Amazon ECR y automatizando todo el ciclo
-de vida con GitHub Actions. Sus componentes principales son:
+La solución orquesta los tres servicios de Tienda Perritos en un clúster Amazon EKS
+(tienda-eks, región us-east-1, namespace tienda), desplegando las imágenes desde un
+registro privado Amazon ECR y automatizando todo el ciclo de vida con GitHub Actions.
+Sus componentes principales son:
+
+Desarrollo local (Docker Compose)
+  • Un archivo docker-compose.yml levanta los 3 contenedores (frontend, backend, db)
+    con red interna, healthcheck de MySQL y volumen local, para desarrollar y probar
+    antes de tocar la nube. Los servicios usan los MISMOS nombres DNS que en
+    Kubernetes, por lo que el mismo artefacto corre sin cambios en local y en la nube.
+
+Integración y despliegue continuo (GitHub Actions)
+  • Pipeline de dos etapas: primero un job de TEST (Jest + supertest) que actúa como
+    compuerta; si pasa, un job build-and-deploy construye las imágenes, las escanea
+    con Trivy, las publica en ECR y despliega en EKS.
+
+Registro de imágenes (Amazon ECR)
+  • Tres repositorios privados (tienda-frontend, tienda-backend, tienda-db) con tags
+    SHA corto + latest para trazabilidad.
 
 Infraestructura de red (VPC)
-  • VPC tienda-vpc (10.0.0.0/16) distribuida en 2 zonas de disponibilidad
-    (us-east-1a y us-east-1b) para alta disponibilidad.
-  • 6 subredes: 2 públicas (alojan el Load Balancer y el NAT Gateway) y 4
-    privadas (alojan los nodos worker, sin IP pública).
-  • NAT Gateway para que los nodos privados tengan salida a Internet (por
-    ejemplo, para hacer docker pull desde ECR) sin quedar expuestos.
+  • VPC tienda-vpc (10.0.0.0/16) en 2 zonas de disponibilidad para alta disponibilidad.
+  • 6 subredes: 2 públicas (Load Balancer y NAT Gateway) y 4 privadas (nodos worker,
+    sin IP pública). NAT Gateway para la salida a Internet de los nodos privados.
 
-Cómputo y orquestación
-  • Clúster EKS con plano de control gestionado por AWS y un node group de
-    instancias t3.medium (2/2/4) en las subredes privadas.
-  • Tres Deployments: frontend, backend y base de datos, cada uno con sus
-    requests/limits de CPU y sondas de salud (readiness/liveness).
-  • HPA (Horizontal Pod Autoscaler) sobre frontend y backend, alimentado por el
-    complemento Metrics Server del clúster.
+Cómputo y orquestación (EKS)
+  • Clúster EKS con plano de control gestionado por AWS y un node group de instancias
+    t3.medium (2/2/4) en las subredes privadas.
+  • Tres Deployments (frontend, backend, db) con requests/limits y sondas de salud.
+  • HPA sobre frontend y backend, alimentado por el complemento Metrics Server.
 
-Conectividad y balanceo
-  • Service tienda-frontend de tipo LoadBalancer → expone la app por un Classic
-    ELB público (URL accesible desde el navegador).
-  • Services internos tienda-backend y tienda-db resueltos por DNS interno de
-    Kubernetes.
+Conectividad, balanceo y seguridad de red
+  • Service tienda-frontend de tipo LoadBalancer → Classic ELB público.
+  • Services internos tienda-backend y tienda-db resueltos por DNS interno.
+  • NetworkPolicy que aísla la base de datos: solo el backend alcanza el puerto 3306.
 
 Flujo de la petición del usuario
-  Usuario → ELB (subred pública) → Service/Pods frontend (Nginx) → Service
-  backend (DNS interno tienda-backend) → Pods backend (Node/Express) → Service db
-  (tienda-db) → MySQL.
+  Usuario → ELB (subred pública) → Service/Pods frontend (Nginx) → Service backend
+  (DNS interno tienda-backend) → Pods backend (Node/Express) → Service db (tienda-db)
+  → MySQL.
 
 Flujo CI/CD
-  commit a la rama main → GitHub Actions (Environment production) → build de las
-  imágenes → push a ECR → kubectl set image + rollout status sobre EKS. Los
-  secretos (credenciales AWS y contraseña de MySQL) viven en un GitHub
-  Environment, nunca en el repositorio.
+  commit a main → GitHub Actions (job test → job build-and-deploy con Environment
+  production) → build + escaneo Trivy → push a ECR → kubectl set image + rollout
+  status sobre EKS. Los secretos viven en un GitHub Environment, nunca en el
+  repositorio.
+
+  [FOTO] fotos/arquitectura.png
+         Diagrama de arquitectura de la solución (desarrollo local con Compose,
+         pipeline CI/CD con test y Trivy, e infraestructura AWS EKS).
 
 
 ================================================================================
- 4. DESARROLLO DE LA SOLUCIÓN
+ 4. DESARROLLO DE LA SOLUCIÓN — LOS 9 PUNTOS
 ================================================================================
-A continuación se desarrolla cada indicador de evaluación (IE1–IE7). Para cada
-uno se indica la exigencia de la rúbrica para alcanzar el 100% de logro, la
-implementación realizada y su justificación, y la evidencia gráfica con los
-comandos de CloudShell empleados.
+A continuación se desarrolla cada uno de los nueve puntos que el encargo exige
+justificar, con su implementación, justificación técnica y evidencia gráfica.
 
 
 --------------------------------------------------------------------------------
- IE1 — CONFIGURACIÓN DEL CLÚSTER EN AWS (25%)
+ PUNTO 1 — MÉTODO DE INTEGRACIÓN (frontend ↔ backend ↔ base de datos)
 --------------------------------------------------------------------------------
-Exigencia de la rúbrica · 100% de logro (ponderación 25%):
-"Clúster completamente funcional, roles IAM, VPC/subredes/SG correctos,
- nodos/capacity providers operativos, arquitectura clara."
+La aplicación es de tres capas y la comunicación entre ellas se resuelve por nombre,
+no por IP, tanto en local como en la nube:
 
+  • FRONTEND → BACKEND: el frontend (Nginx) sirve la interfaz y actúa como PROXY
+    inverso. Toda petición a la ruta /api/ se reenvía al backend por su nombre de
+    servicio (tienda-backend) en el puerto 3001. Así el navegador solo habla con el
+    frontend y nunca directamente con el backend.
+  • BACKEND → BASE DE DATOS: el backend (Node/Express) mantiene un POOL de conexiones
+    a MySQL, apuntando al host tienda-db en el puerto 3306, con las credenciales
+    tomadas de variables de entorno (DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT).
+  • RESOLUCIÓN DE NOMBRES: en Kubernetes, los nombres tienda-backend y tienda-db los
+    resuelve CoreDNS (DNS interno del clúster); en Docker Compose, los resuelve la red
+    interna de Docker. Como los nombres son idénticos en ambos entornos, el código no
+    distingue dónde corre.
+
+  FLUJO COMPLETO DE UNA PETICIÓN
+  ------------------------------
+  Usuario → DNS del ELB :80 → Service frontend → pods Nginx → (proxy /api) →
+  Service backend :3001 → pods Node/Express → Service db :3306 → MySQL.
+  El frontend es la única cara pública; backend y base de datos permanecen internos.
+
+  EVIDENCIA
+  ---------
+  [FOTO] fotos/IE7_03_crud_ok.png
+         CRUD funcional en la web (alta/edición/baja de productos): demuestra la
+         comunicación Front→Back→DB operativa de extremo a extremo.
+  [FOTO] fotos/IE6_01_logs.png
+         Logs del backend ("Servidor backend escuchando en puerto 3001", "Pool de
+         conexiones MySQL inicializado") y del frontend (200 OK): confirman la
+         integración entre capas.
+
+
+--------------------------------------------------------------------------------
+ PUNTO 2 — CONTENEDORES (imágenes, redes y orquestación local con Docker Compose)
+--------------------------------------------------------------------------------
+Cada componente tiene su propia imagen de contenedor, construida para ser pequeña y
+segura, y se orquestan localmente con Docker Compose antes de llevarlos a la nube.
+
+  IMÁGENES POR COMPONENTE (minimalistas)
+  --------------------------------------
+  • BACKEND — Dockerfile MULTIETAPA:
+      - Etapa 1 (deps): instala SOLO dependencias de producción con `npm ci --omit=dev`.
+        Las devDependencies (jest, supertest) nunca entran a la imagen final.
+      - Etapa 2 (runtime): imagen node:18-alpine con solo node_modules de producción
+        y el código; NODE_ENV=production; endurecimiento con `USER node` (el proceso
+        NO corre como root).
+    Beneficio: imagen más liviana, menor superficie de ataque y arranque más rápido.
+  • FRONTEND — imagen nginx:alpine con los estáticos y la configuración de proxy.
+  • BASE DE DATOS — imagen basada en MySQL con el esquema y los datos semilla.
+  • `.dockerignore` en frontend, backend y db para no copiar node_modules, .env,
+    .git ni documentación a las imágenes.
+
+  ORQUESTACIÓN LOCAL (docker-compose.yml)
+  ---------------------------------------
+  El archivo docker-compose.yml define el entorno de desarrollo local completo:
+    • 3 servicios: tienda-db, tienda-backend, tienda-frontend.
+    • Red interna `perritos`: los servicios se resuelven por nombre.
+    • HEALTHCHECK de MySQL (mysqladmin ping): el backend arranca solo cuando la BD
+      está lista (depends_on: condition: service_healthy).
+    • Volumen local db_data para la persistencia de la base en desarrollo.
+    • Frontend publicado en http://localhost:8080 (8080:80).
+  Decisión de diseño clave: los servicios del compose usan los MISMOS nombres DNS que
+  los Services de Kubernetes (tienda-db, tienda-backend, tienda-frontend), por lo que
+  el mismo artefacto corre sin cambios en local y en producción.
+
+  ROL DE COMPOSE FRENTE A ECR Y EKS (no compiten, se complementan)
+  ---------------------------------------------------------------
+    • Docker Compose  → orquestación del entorno de desarrollo LOCAL (PC).
+    • Amazon ECR      → registro de imágenes en la nube (la "bodega" con tags).
+    • Amazon EKS      → orquestación de PRODUCCIÓN (escala, balancea, autorrecupera).
+  Compose es el primer eslabón de la cadena:
+    dev local (compose) → push a GitHub → pipeline (test → build → scan) →
+    publica en ECR → despliega en EKS.
+
+  EVIDENCIA
+  ---------
+  [FOTO] fotos/IE2_compose_up.png
+         `docker compose ps` con los 3 servicios Up y la BD en estado healthy.
+  [FOTO] fotos/IE2_app_local.png
+         Aplicación con productos funcionando en http://localhost:8080.
+
+
+--------------------------------------------------------------------------------
+ PUNTO 3 — REGISTRO DE IMÁGENES (Amazon ECR + tags para trazabilidad)
+--------------------------------------------------------------------------------
+Las imágenes construidas por el pipeline se publican en Amazon ECR, el registro
+privado de contenedores de AWS.
+
+  REPOSITORIOS
+  ------------
+  Tres repositorios privados: tienda-frontend, tienda-backend, tienda-db.
+  Configuración: privados, mutabilidad de tags Mutable, cifrado AES-256, us-east-1.
+  (La alternativa a ECR según la pauta sería Docker Hub; se eligió ECR por integrarse
+  nativamente con EKS y con las credenciales del pipeline.)
+
+  ETIQUETADO PARA TRAZABILIDAD
+  ----------------------------
+  Cada imagen se publica con DOS tags:
+    • :<sha7>  — los 7 primeros caracteres del commit (IMAGE_TAG=${GITHUB_SHA::7}):
+      inmutable y trazable exactamente al commit que la generó.
+    • :latest  — puntero a la última versión, cómodo para referencias por defecto.
+  El despliegue usa el tag :<sha7> (kubectl set image), garantizando que EKS corre la
+  imagen exacta de ese commit.
+
+  QUÉ SE DEFINE EN ECR VS EN EKS
+  ------------------------------
+    • ECR (registro): repositorios, mutabilidad, cifrado y región. Solo ALMACENA
+      imágenes versionadas; no define cómo corre la app.
+    • EKS (orquestador): clúster, nodos y manifiestos (cómo y dónde corren los pods).
+  Regla: si es una IMAGEN → ECR; si es INFRAESTRUCTURA o EJECUCIÓN → EKS.
+
+  EVIDENCIA
+  ---------
+  [FOTO] fotos/IE2_01_ecr_repos.png
+         Los 3 repositorios privados en Amazon ECR (frontend, backend, db).
+
+
+--------------------------------------------------------------------------------
+ PUNTO 4 — CI/CD (pipeline test → build → escaneo → push → deploy)
+--------------------------------------------------------------------------------
+El workflow .github/workflows/deploy-eks.yml se dispara con cada push a main (y
+manualmente con workflow_dispatch). Está compuesto por DOS jobs:
+
+  JOB 1 — test (compuerta de calidad, SIN secretos)
+  -------------------------------------------------
+  Corre en un runner ubuntu-latest con Node.js 18. Ejecuta `npm ci` y `npm test`
+  (Jest + supertest). Los tests unitarios del backend MOCKEAN la base de datos, por
+  lo que no necesitan infraestructura. Si un test falla, el despliegue NI SIQUIERA
+  parte, porque el segundo job declara `needs: test`.
+
+  JOB 2 — build-and-deploy (con Environment production)
+  -----------------------------------------------------
+  Solo arranca si el job test pasó. Declara `environment: production`, por lo que solo
+  aquí se exponen los 7 secretos. Sus etapas:
+    1. Configurar credenciales AWS (incluye el session token temporal del lab).
+    2. Login en ECR.
+    3. Build de las 3 imágenes (frontend, backend, db) con tags :<sha7> y :latest.
+    4. ESCANEO Trivy de las 3 imágenes (ver Punto 8).
+    5. Push de las imágenes a ECR.
+    6. update-kubeconfig hacia el clúster tienda-eks.
+    7. Aplicar namespace y generar el Secret de MySQL en caliente (ver Punto 6).
+    8. Desplegar db → backend → frontend (kubectl apply + set image + rollout status).
+    9. Verificar la Metrics API y aplicar los HPA.
+   10. Listar pods, servicios y HPA (evidencia en el log).
+  El despliegue es un ROLLING UPDATE: salen pods nuevos y recién entonces mueren los
+  viejos, sin caída del servicio. Una corrida completa toma ~2 minutos.
+
+  EVIDENCIA
+  ---------
+  [FOTO] fotos/IE3_npm_test_local.png
+         `npm test` con los 7 tests verdes en local (la BD se mockea; son la primera
+         compuerta del pipeline).
+  [FOTO] fotos/IE4_01_pipeline_verde.png
+         Pipeline de GitHub Actions en verde: job test + job build-and-deploy
+         (build, escaneo Trivy, push y deploy) con éxito.
+
+
+--------------------------------------------------------------------------------
+ PUNTO 5 — INFRAESTRUCTURA EN LA NUBE (VPC, subredes, EKS y nodos)
+--------------------------------------------------------------------------------
 Se creó la VPC tienda-vpc (10.0.0.0/16) con 6 subredes en 2 AZ (2 públicas + 4
 privadas) y un NAT Gateway para la salida a Internet de las subredes privadas. El
-clúster tienda-eks (Kubernetes 1.35) usa el rol IAM LabRole tanto para el plano
-de control como para los nodos, y un node group de instancias t3.medium
-(deseado/mín/máx = 2/2/4) ubicado en las subredes privadas.
+clúster tienda-eks usa el rol IAM LabRole tanto para el plano de control como para
+los nodos, y un node group de instancias t3.medium (deseado/mín/máx = 2/2/4) ubicado
+en las subredes privadas.
 
   JUSTIFICACIÓN DEL TIPO DE INSTANCIA (t3.medium) Y DESCARTE DE t2.micro/nano
   --------------------------------------------------------------------------
-  Se eligió t3.medium (2 vCPU, 4 GiB RAM) como mínimo viable, descartando
-  instancias más pequeñas pese a su menor costo, por tres razones técnicas:
+  Se eligió t3.medium (2 vCPU, 4 GiB RAM) como mínimo viable, descartando instancias
+  más pequeñas pese a su menor costo, por tres razones técnicas:
+    1) LÍMITE DE IPs POR NODO (factor decisivo). El plugin Amazon VPC CNI asigna una
+       IP de la VPC a cada pod, y la cantidad disponible depende del tamaño de la
+       instancia. t2.micro/nano permiten ~4 pods por nodo; t3.medium permite ~17
+       (Max IPs: 18). Con solo 4 IPs no alcanza ni para los pods de sistema.
+    2) PODS DE SISTEMA. Cada nodo ya ejecuta CoreDNS, kube-proxy, aws-node (CNI) y
+       Metrics Server, lo que consumiría casi toda la capacidad de un t2.micro.
+    3) MEMORIA. 0.5–1 GiB no basta para kubelet + pods de sistema + MySQL +
+       Node/Express; los nodos quedarían NotReady. Los 4 GiB de t3.medium dan holgura.
+  El control de créditos se gestionó por otras vías: desired=2, observabilidad apagada
+  y apagado del node group (a 0) al terminar cada sesión.
 
-  1) LÍMITE DE IPs POR NODO (factor decisivo). El plugin Amazon VPC CNI asigna
-     una IP de la VPC a cada pod, y la cantidad disponible depende del tamaño de
-     la instancia. t2.micro/nano permiten ~4 pods por nodo; t3.medium permite
-     ~17. Con solo 4 IPs no alcanza ni para los pods de sistema.
+  PERMISOS IAM (rol LabRole)
+  --------------------------
+  No fue necesario crear ni adjuntar políticas: el Learner Lab entrega LabRole con un
+  conjunto amplio de políticas administradas (y bloquea editar roles IAM). Las 3
+  políticas clave para los nodos worker son AmazonEKSWorkerNodePolicy,
+  AmazonEKS_CNI_Policy y AmazonEC2ContainerRegistryReadOnly (esta última autoriza el
+  docker pull de las imágenes desde ECR). El plano de control usa AmazonEKSClusterPolicy.
 
-  2) PODS DE SISTEMA. Cada nodo ya ejecuta CoreDNS, kube-proxy, aws-node (CNI) y
-     Metrics Server, lo que consume casi toda la capacidad de un t2.micro y
-     dejaría a la app sin espacio ni margen para escalar (pods en Pending).
-
-  3) MEMORIA. 0.5–1 GiB no basta para kubelet + pods de sistema + MySQL +
-     Node/Express; los nodos quedarían NotReady. Los 4 GiB de t3.medium dan
-     holgura para operar y escalar.
-
-  El ahorro de una instancia más pequeña es ilusorio, porque rompería la demo del
-  autoscaling (HPA), que es el núcleo del indicador de escalabilidad. El control
-  de créditos se gestionó por otras vías: desired=2, observabilidad apagada y
-  Stop Lab al terminar cada sesión.
-
-  PERMISOS IAM (políticas incluidas en LabRole)
-  ---------------------------------------------
-  No fue necesario crear ni adjuntar políticas: AWS Academy entrega LabRole con
-  un conjunto amplio de políticas administradas (y Learner Lab bloquea editar
-  roles IAM). Las 3 políticas clave para los nodos worker son:
-    • AmazonEKSWorkerNodePolicy — registra y opera la instancia EC2 como nodo del
-      clúster.
-    • AmazonEKS_CNI_Policy — habilita el plugin de red (VPC CNI) para asignar IPs
-      a los pods.
-    • AmazonEC2ContainerRegistryReadOnly — permiso de solo lectura sobre ECR
-      (autoriza el docker pull de las imágenes).
-  El rol del plano de control no hace pull de imágenes; su política relevante es
-  AmazonEKSClusterPolicy, también incluida en LabRole.
-
-  JUSTIFICACIÓN DEL DISEÑO DE RED (patrón de producción)
-  ------------------------------------------------------
-  Se evaluaron dos topologías. Camino A (lab simplificado): nodos en subredes
-  públicas con IP pública y sin NAT — más barato, pero expone los nodos y deja
-  sin uso las subredes privadas. Camino B (elegido, producción): nodos en
-  subredes privadas (sin IP pública), un NAT Gateway para su salida y el Load
-  Balancer en las públicas. Se eligió B por seguridad (el único punto de entrada
-  es el ELB), defensa en capas (aunque un pod sea comprometido, el nodo no está
-  expuesto), coherencia (las 6 subredes cumplen un rol real) y porque es la
-  arquitectura recomendada por AWS para EKS. El costo del NAT se mitigó usando uno
+  DISEÑO DE RED (patrón de producción)
+  ------------------------------------
+  Se evaluaron dos topologías. Camino A (simplificado): nodos en subredes públicas con
+  IP pública y sin NAT — más barato, pero expone los nodos. Camino B (elegido): nodos
+  en subredes privadas (sin IP pública), un NAT Gateway para su salida y el Load
+  Balancer en las públicas. Se eligió B por seguridad (el único punto de entrada es el
+  ELB), defensa en capas, coherencia (las 6 subredes cumplen un rol real) y porque es
+  la arquitectura recomendada por AWS para EKS. El costo del NAT se mitigó usando uno
   solo y apagando el lab al terminar.
 
   ACCESO REMOTO A LOS NODOS = DESHABILITADO (sin SSH)
   ---------------------------------------------------
-  En el node group se dejó OFF la opción de acceso remoto: toda la administración
-  se hace con kubectl desde CloudShell (que habla con el API del clúster, no con
-  los nodos por SSH). Habilitar esa opción abriría el puerto 22 y contradiría el
-  diseño de red privada. Si excepcionalmente se necesitara una shell en un nodo,
-  se usaría AWS SSM Session Manager (no abre el puerto 22, funciona sobre nodos
-  privados y queda auditado por IAM), de modo que dejar el acceso remoto en OFF no
-  elimina ese plan B.
+  En el node group se dejó OFF el acceso remoto: toda la administración se hace con
+  kubectl (que habla con el API del clúster, no con los nodos por SSH). Habilitarlo
+  abriría el puerto 22 y contradiría el diseño de red privada. Si excepcionalmente se
+  necesitara una shell en un nodo, se usaría AWS SSM Session Manager (no abre el puerto
+  22, funciona sobre nodos privados y queda auditado por IAM).
 
-  AISLAMIENTO DE LA BASE DE DATOS CON NETWORKPOLICY (defensa en profundidad)
-  -------------------------------------------------------------------------
-  Por defecto la red de Kubernetes es plana: todo pod puede alcanzar a cualquier
-  otro por su IP o su Service. Esto significa que, aunque la arquitectura de 3
-  capas hace que el frontend hable solo con el backend y solo el backend con la
-  base de datos, a nivel de red nada IMPIDE que el pod del frontend (u otro pod
-  comprometido) se conecte directo al puerto 3306 de MySQL.
+  RELACIÓN CLÚSTER EKS ↔ ELB (el balanceador lo crea el clúster)
+  -------------------------------------------------------------
+  El ELB no se configura a mano: se declara con `type: LoadBalancer` en el
+  frontend-service.yaml. Al aplicar el Service, el cloud-controller-manager de EKS
+  llama a la API de AWS y aprovisiona un Classic ELB público en las subredes públicas
+  (no hay AWS Load Balancer Controller en el Learner Lab). El ELB balancea hacia los
+  NODOS por un NodePort, y kube-proxy reenvía al pod de Nginx; si se borrara el Service,
+  EKS eliminaría el ELB automáticamente.
 
-  Para cerrar esa brecha se agregó la NetworkPolicy k8s/db-networkpolicy.yaml, que
-  aplica default-deny de ingreso sobre el pod tienda-db y solo permite conexiones
-  al 3306 provenientes de pods con la etiqueta app=tienda-backend. Así el acceso a
-  la BD deja de ser una convención de diseño y pasa a ser una regla IMPUESTA por
-  el clúster: cualquier intento de conexión que no venga del backend se descarta.
-
-  REQUISITO EN EKS: las NetworkPolicies solo surten efecto si el CNI las hace
-  cumplir. El complemento Amazon VPC CNI las soporta, pero hay que ACTIVAR el
-  enforcement (opción "Enable Network Policy" del add-on VPC CNI). Sin ese ajuste,
-  el manifiesto se acepta pero no bloquea nada. Se dejó habilitado al crear el
-  clúster. Esta es una defensa complementaria al aislamiento de subredes privadas:
-  la red separa el clúster de Internet, y la NetworkPolicy segmenta el tráfico
-  ENTRE pods dentro del clúster.
-
-  [FOTO] fotos/IE1_21_networkpolicy_db.png
-         NetworkPolicy db-allow-backend-only activa y prueba de bloqueo: desde un
-         pod del frontend la conexión al 3306 de tienda-db falla (timeout),
-         mientras que desde el backend sí conecta.
-         CMD (CloudShell):
-           kubectl apply -f k8s/db-networkpolicy.yaml
-           kubectl get networkpolicy -n tienda
-           # prueba de bloqueo (debe fallar / timeout):
-           kubectl exec -n tienda deploy/tienda-frontend -- \
-             sh -c "nc -zv -w3 tienda-db 3306"
-           # prueba de acceso permitido (debe conectar):
-           kubectl exec -n tienda deploy/tienda-backend -- \
-             sh -c "nc -zv -w3 tienda-db 3306"
+  URL pública (EXTERNAL-IP del ELB):
+    http://af52da2cfe9984afa87243cc593cd688-1793386799.us-east-1.elb.amazonaws.com
+    (HTTP, puerto 80)
 
   EVIDENCIA
   ---------
   [FOTO] fotos/IE1_01_vpc_creacion.png
-         VPC tienda-vpc creada con 6 subredes (2 públicas + 4 privadas) y NAT.
+         VPC tienda-vpc con 6 subredes (2 públicas + 4 privadas) y NAT.
   [FOTO] fotos/IE1_03_subredes_6_lista.png
          Las 6 subredes en estado Available, repartidas en us-east-1a/1b.
-  [FOTO] fotos/IE1_04_tags_subred_publica.png
-         Etiqueta kubernetes.io/role/elb = 1 en subred pública.
-  [FOTO] fotos/IE1_05_tags_subred_privada.png
-         Etiqueta kubernetes.io/role/internal-elb = 1 en subred privada.
   [FOTO] fotos/IE1_06_cluster_endpoint_acceso.png
-         Acceso al endpoint del clúster configurado como "Público y privado".
+         Endpoint del clúster configurado como "Público y privado".
   [FOTO] fotos/IE1_07_complementos_marcados.png
-         Complementos: CoreDNS, kube-proxy y CNI de Amazon VPC.
-  [FOTO] fotos/IE1_09_review_cluster.png
-         Revisión: rol LabRole, modo "API de EKS", Kubernetes 1.35.
+         Complementos: CoreDNS, kube-proxy, Amazon VPC CNI y Metrics Server.
   [FOTO] fotos/IE1_14_cluster_active.png
          Clúster tienda-eks en estado Active.
   [FOTO] fotos/IE1_16_nodegroup_compute.png
@@ -259,82 +391,205 @@ de control como para los nodos, y un node group de instancias t3.medium
          2 nodos Ready, uno por AZ, con EXTERNAL-IP <none> = sin IP pública.
          CMD (CloudShell):
            kubectl get nodes -o wide -L topology.kubernetes.io/zone
-
-
---------------------------------------------------------------------------------
- IE2 — DESPLIEGUE FRONTEND + BACKEND (25%)
---------------------------------------------------------------------------------
-Exigencia de la rúbrica · 100% de logro (ponderación 25%):
-"Servicios desplegados correctamente desde ECR, variables correctas, puertos y
- balanceador operativo."
-
-Se crearon tres repositorios privados en Amazon ECR (tienda-frontend,
-tienda-backend, tienda-db). Las imágenes se despliegan desde ECR con sus
-variables de entorno cargadas (DB_HOST, DB_USER, etc.). El balanceo se resuelve
-con el Service tienda-frontend de tipo LoadBalancer, que aprovisiona un Classic
-ELB público. La comunicación Front→Back→DB usa el DNS interno de Kubernetes.
-
-URL pública (EXTERNAL-IP del ELB):
-  http://a49d9bbc548ab48b19dddc7f331bf7c4-1672428966.us-east-1.elb.amazonaws.com
-  (HTTP, puerto 80)
-
-El EXTERNAL-IP se verificó por dos vías equivalentes: (1) automatizada, en los
-logs del pipeline; y (2) manual, desde CloudShell tras aws eks update-kubeconfig.
-
-  EVIDENCIA
-  ---------
-  [FOTO] fotos/IE2_01_ecr_repos.png
-         Los 3 repositorios privados en Amazon ECR (frontend, backend, db).
-  [FOTO] fotos/IE2_02_externalip_actions.png
-         EXTERNAL-IP del ELB visible en los logs de GitHub Actions.
-  [FOTO] fotos/IE2_03_externalip_cloudshell.png
-         Mismo EXTERNAL-IP obtenido desde CloudShell.
+  [FOTO] fotos/IE2_04_app_navegador.png
+         Tienda Perritos cargada en el navegador desde la URL pública del ELB.
          CMD (CloudShell):
            aws eks update-kubeconfig --region us-east-1 --name tienda-eks
            kubectl get svc -n tienda
-  [FOTO] fotos/IE2_04_app_navegador.png
-         Tienda Perritos cargada en el navegador desde la URL pública del ELB.
 
 
 --------------------------------------------------------------------------------
- IE3 — CONFIGURACIÓN DE AUTOSCALING — HPA (10%)
+ PUNTO 6 — CONFIGURACIÓN Y SECRETOS (GitHub Environment + mínimo privilegio)
 --------------------------------------------------------------------------------
-Exigencia de la rúbrica · 100% de logro (ponderación 10%):
-"Autoscaling configurado correctamente, métricas funcionando y justificación del
- umbral."
+Los secretos viven en un GitHub Environment "production" (Settings > Environments),
+NUNCA en el repositorio. El job build-and-deploy solo puede leerlos porque declara
+`environment: production`.
 
-Se configuró HPA para ambos servicios visibles: backend 2→10 réplicas con umbral
-70% CPU, y frontend 2→6 réplicas con umbral 60% CPU. El requisito previo es el
-Metrics Server: se usa el complemento gestionado del clúster EKS (no el
-manifiesto de upstream). El HPA calcula el % de CPU contra el request de cada
-Deployment (backend request=100m / límite=500m), por lo que el umbral de 70%
-equivale a 70m de CPU.
+  LOS 7 SECRETS DEL ENVIRONMENT production
+  ----------------------------------------
+    • AWS_ACCESS_KEY_ID     — credencial temporal de AWS (rota por sesión del lab).
+    • AWS_SECRET_ACCESS_KEY — clave secreta asociada (rota por sesión).
+    • AWS_SESSION_TOKEN     — token de sesión temporal (obligatorio; rota por sesión).
+    • AWS_REGION            — us-east-1 (fijo).
+    • EKS_CLUSTER_NAME      — tienda-eks (fijo).
+    • EKS_NAMESPACE         — tienda (fijo).
+    • MYSQL_ROOT_PASSWORD   — contraseña root de MySQL (definida por el equipo; no se
+                              publica ni se versiona).
+
+  SECRET DE MYSQL GENERADO EN EL PIPELINE (no versionado)
+  ------------------------------------------------------
+  La contraseña de la BD nunca se escribe en el repo. El pipeline crea el Secret de
+  Kubernetes en tiempo de despliegue a partir del secret de GitHub:
+    kubectl create secret generic mysql-secret \
+      --from-literal=MYSQL_ROOT_PASSWORD="***" -n tienda \
+      --dry-run=client -o yaml | kubectl apply -f -
+  De ese Secret lo consumen el backend (vía secretKeyRef en DB_PASSWORD) y la base de
+  datos. El repositorio solo versiona una plantilla de referencia (mysql-secret.example.yaml).
+
+  MÍNIMO PRIVILEGIO Y ROTACIÓN
+  ----------------------------
+  Se eligió un Environment (en lugar de secrets sueltos del repo) por su aislamiento
+  de alcance, sus reglas de protección y su trazabilidad: solo los jobs que declaran
+  el environment acceden a los secretos. Las credenciales de AWS son temporales y
+  rotan en cada sesión del Learner Lab; al vencer, el pipeline falla en el paso de
+  credenciales y basta con actualizar los 3 secrets de AWS.
+
+  Nota — Account ID: el identificador de cuenta (618629205592) NO es un secreto sino
+  un identificador; viaja en texto plano dentro de la URL de ECR en los manifiestos.
+  Lo sensible son las claves de acceso, que sí van cifradas en el Environment.
+
+  EVIDENCIA
+  ---------
+  [FOTO] fotos/IE5_01_github_environment.png
+         GitHub Environment "production" para aislar los secretos del despliegue.
+  [FOTO] fotos/IE5_02_github_secrets.png
+         Secrets configurados (AWS_*, EKS_*, MYSQL_ROOT_PASSWORD).
+
+
+--------------------------------------------------------------------------------
+ PUNTO 7 — OBSERVABILIDAD (logs del pipeline, de la app y del plano de control)
+--------------------------------------------------------------------------------
+La observabilidad se aborda en tres niveles complementarios:
+
+  1) LOGS DEL PIPELINE (GitHub Actions)
+     Cada corrida deja el detalle de test, build, escaneo, push y deploy, incluyendo
+     el EXTERNAL-IP del ELB y el estado de pods/servicios/HPA al final.
+
+  2) LOGS DE LA APLICACIÓN (nivel POD, kubectl logs)
+     kubectl logs del backend muestra "Servidor backend escuchando en puerto 3001" y
+     "Pool de conexiones MySQL inicializado" (conexión Back↔DB correcta); el frontend
+     (nginx) registra respuestas 200 OK, incluidas las sondas kube-probe
+     (readiness/liveness funcionando). Las métricas de CPU/memoria por pod se ven con
+     kubectl top (Metrics Server).
+
+  3) LOGS DEL PLANO DE CONTROL (nivel PLATAFORMA, CloudWatch)
+     Se activaron temporalmente los logs del plano de control (API server + Auditoría)
+     → log group /aws/eks/tienda-eks/cluster. El log de AUDITORÍA registra quién hizo
+     qué en el clúster (cada kubectl apply / set image / delete). Tras la captura se
+     DESACTIVARON para no consumir créditos.
+
+  DISTINCIÓN IMPORTANTE: los logs de POD (kubectl logs) responden "¿mi aplicación
+  funciona?"; los logs de CONTROL PLANE (CloudWatch) responden "¿quién administró el
+  clúster y qué operaciones ocurrieron a nivel de plataforma?". Son capas distintas.
+
+  Tiempos: ~2 min por corrida completa del pipeline.
+
+  EVIDENCIA
+  ---------
+  [FOTO] fotos/IE6_01_logs.png
+         Logs de la app: backend escuchando y pool MySQL OK; frontend respondiendo
+         200 OK.
+         CMD (CloudShell):
+           kubectl logs deploy/tienda-backend -n tienda --tail=40
+           kubectl logs deploy/tienda-frontend -n tienda --tail=20
+  [FOTO] fotos/IE6_02_cloudwatch.png
+         CloudWatch: log group /aws/eks/tienda-eks/cluster con streams del API Server
+         y de Auditoría (kube-apiserver-audit).
+
+
+--------------------------------------------------------------------------------
+ PUNTO 8 — SEGURIDAD BÁSICA (imágenes, escaneo, puertos, red y aislamiento de la BD)
+--------------------------------------------------------------------------------
+La seguridad se aplica en varias capas (defensa en profundidad):
+
+  a) IMÁGENES MINIMALISTAS Y NON-ROOT
+     Imágenes base alpine; backend con Dockerfile multietapa que deja fuera las
+     devDependencies y corre como usuario `node` (sin privilegios de root). Menor
+     superficie de ataque.
+
+  b) ESCANEO DE VULNERABILIDADES (Trivy — DevSecOps "shift-left")
+     Entre el build y el push, el pipeline escanea las 3 imágenes con Trivy (de Aqua
+     Security), filtrando severidades HIGH y CRITICAL. Se detectan vulnerabilidades
+     ANTES de publicar la imagen. Está configurado en modo INFORMATIVO (exit-code 0):
+     reporta en el log pero no bloquea el despliegue, porque las imágenes base
+     (nginx, node, mysql) suelen traer CVEs que no dependen del equipo. En un entorno
+     productivo real se elevaría a modo bloqueante (exit-code 1) — mejora futura.
+
+  c) SEGURIDAD DE RED (grupos de seguridad y diseño privado)
+     No se crearon grupos de seguridad personalizados: EKS aprovisiona y gestiona
+     automáticamente el del clúster (comunicación control plane ↔ nodos y nodo ↔ nodo)
+     y el del ELB (abre el :80 y las reglas hacia el NodePort). La seguridad real viene
+     del DISEÑO DE RED: nodos en subredes privadas sin IP pública (inalcanzables desde
+     Internet), salida solo por NAT, y exposición pública limitada al frontend
+     (backend y base de datos quedan internos). El endpoint del clúster público y
+     privado mantiene el tráfico nodo↔API dentro de la VPC.
+
+  d) AISLAMIENTO DE LA BASE DE DATOS CON NETWORKPOLICY (mejora implementada)
+     Por defecto la red de Kubernetes es plana: todo pod puede alcanzar a cualquier
+     otro. Aunque la arquitectura de 3 capas hace que solo el backend hable con MySQL,
+     a nivel de red nada IMPEDÍA que el frontend (u otro pod comprometido) se conectara
+     al puerto 3306. Para cerrar esa brecha se agregó la NetworkPolicy
+     db-allow-backend-only (k8s/db-networkpolicy.yaml): aplica default-deny de ingreso
+     sobre el pod tienda-db y solo permite conexiones al 3306 desde pods con la etiqueta
+     app=tienda-backend. Así el acceso a la BD deja de ser una convención de diseño y
+     pasa a ser una regla IMPUESTA por el clúster.
+     Requisito en EKS: las NetworkPolicies solo surten efecto si el complemento Amazon
+     VPC CNI tiene habilitado el enforcement ("Enable Network Policy"); se dejó
+     habilitado al configurar el add-on. Es una defensa complementaria al aislamiento
+     por subredes: la red separa el clúster de Internet, y la NetworkPolicy segmenta el
+     tráfico ENTRE pods dentro del clúster.
+
+  e) PUERTOS MÍNIMOS
+     Solo el frontend se expone (ELB :80). Backend (ClusterIP :3001) y base de datos
+     (headless :3306) son internos. SSH a los nodos deshabilitado.
+
+  EVIDENCIA
+  ---------
+  [FOTO] fotos/IE1_21_networkpolicy_db.png
+         NetworkPolicy db-allow-backend-only activa y prueba de aislamiento: desde un
+         pod sin la etiqueta de backend la conexión al 3306 de tienda-db es BLOQUEADA,
+         mientras que desde el backend sí conecta (PERMITIDO).
+         CMD (CloudShell):
+           kubectl apply -f k8s/db-networkpolicy.yaml
+           kubectl get networkpolicy -n tienda
+           # prueba de bloqueo (pod sin etiqueta backend → falla):
+           kubectl run np-test -n tienda --image=busybox:1.28 --restart=Never --rm -it -- \
+             sh -c 'nc -w 4 -z tienda-db 3306 && echo CONECTO || echo BLOQUEADO'
+           # prueba de acceso permitido (backend → conecta):
+           kubectl exec -n tienda deploy/tienda-backend -- \
+             sh -c 'nc -w 4 -z tienda-db 3306 && echo PERMITIDO'
+
+
+--------------------------------------------------------------------------------
+ PUNTO 9 — ORQUESTACIÓN Y ESCALABILIDAD (por qué EKS y cómo escala)
+--------------------------------------------------------------------------------
+  POR QUÉ UN ORQUESTADOR (EKS) Y NO DESPLIEGUE MANUAL
+  --------------------------------------------------
+  Un orquestador aporta lo que un despliegue manual (contenedores sueltos en una EC2)
+  no da: autorrecuperación (recrea pods caídos), balanceo y descubrimiento de servicios,
+  despliegues sin caída (rolling updates), y autoescalado. Se eligió EKS (Kubernetes
+  gestionado) en lugar de ECS (orquestador propio de AWS) por ser el estándar de la
+  industria y portable. ECR acompaña a EKS como registro de imágenes; ECS no se utiliza.
+
+  AUTOESCALADO HORIZONTAL (HPA)
+  -----------------------------
+  Se configuró HPA para ambos servicios visibles: backend 2→10 réplicas con umbral 70%
+  CPU, y frontend 2→6 réplicas con umbral 60% CPU. El requisito previo es el Metrics
+  Server (complemento gestionado del clúster). El HPA calcula el % de CPU contra el
+  request de cada Deployment (backend request=100m / límite=500m), por lo que el umbral
+  de 70% equivale a 70m de CPU. Sin requests/limits no habría métrica y el HPA quedaría
+  en <unknown>.
 
   JUSTIFICACIÓN DEL UMBRAL (70% backend / 60% frontend)
   -----------------------------------------------------
-  Se deja margen antes de saturar el pod para que el HPA tenga tiempo de crear
-  réplicas nuevas (que tardan en arrancar) antes de degradar el servicio. El
-  frontend usa un umbral algo menor (60%) por ser la cara visible al usuario:
-  conviene anticiparse más a los picos de tráfico.
-
-  INCIDENTE RESUELTO: HPA en "<unknown>" / Metrics API caída
-  ----------------------------------------------------------
-  Síntoma: tras desplegar, el HPA mostraba "cpu <unknown>/70%" y kubectl top pods
-  devolvía "Metrics API not available". Diagnóstico: el pipeline instalaba además
-  el metrics-server de upstream, cuyo Service usa el selector "k8s-app"; al hacer
-  apply sobre el Service ya creado por el complemento del EKS (etiqueta
-  "app.kubernetes.io/name"), los selectores se fusionaron en un AND imposible →
-  sin endpoints → Metrics API caída. Solución de raíz: se eliminó del pipeline la
-  instalación de upstream y se dejó solo el complemento gestionado, añadiendo una
-  verificación de la Metrics API.
+  Se deja margen antes de saturar el pod para que el HPA tenga tiempo de crear réplicas
+  nuevas (que tardan en arrancar) antes de degradar el servicio. El frontend usa un
+  umbral algo menor (60%) por ser la cara visible al usuario: conviene anticiparse más.
 
   PRUEBA DE CARGA Y ESCALADO
   --------------------------
-  Se generó carga artificial sobre el backend con un pod load-generator (10
-  bucles en paralelo de peticiones a /api/health) y se observó el HPA en vivo.
-  Resultado: el CPU subió a 435%, el HPA escaló 2 → 4 → 8 → 10 réplicas (tope
-  configurado) y, al repartirse la carga, el CPU promedio volvió bajo el umbral;
-  al retirar la carga, volvió a 2 réplicas tras el enfriamiento (~3–5 min).
+  Se generó carga artificial sobre el backend con un pod load-generator (bucles en
+  paralelo de peticiones a /api/health). Resultado: el CPU subió sobre 400%, el HPA
+  escaló 2 → 4 → 8 → 10 réplicas (tope configurado) y, al repartirse la carga, el CPU
+  promedio bajó del umbral; al retirar la carga, volvió a 2 réplicas tras el
+  enfriamiento (~3–5 min). Concepto clave: el HPA escala PODS, no nodos; esos pods
+  nuevos nacen sobre los mismos 2 nodos.
+
+  AUTORRECUPERACIÓN Y ALTA DISPONIBILIDAD
+  ---------------------------------------
+  Al borrar un pod del backend, el clúster crea automáticamente uno nuevo manteniendo
+  las 2 réplicas. Los nodos se reparten en 2 AZ (un único node group con Auto Scaling
+  Group), lo que da tolerancia a la caída de una zona.
 
   EVIDENCIA
   ---------
@@ -346,228 +601,53 @@ equivale a 70m de CPU.
            kubectl get hpa -n tienda
   [FOTO] fotos/IE3_02_hpa_escalando.png
          HPA escalando: CPU sobre el umbral y réplicas subiendo (2→4→8).
-         CMD (CloudShell):
-           kubectl get hpa -n tienda -w        # con la carga activa
   [FOTO] fotos/IE3_03_pods_escalados.png
          Backend en carga (~77%/70%) con ~10 pods Running en ambos nodos.
          CMD (CloudShell):
-           # terminal de carga:
            kubectl run -n tienda load-generator --image=busybox:1.28 --restart=Never -- \
              /bin/sh -c "for i in 1 2 3 4 5 6 7 8 9 10; do (while true; do \
              wget -q -O- http://tienda-backend:3001/api/health >/dev/null 2>&1; done) & done; wait"
-           # monitor:
            watch -n 2 "kubectl get hpa,pods -n tienda -o wide"
   [FOTO] fotos/IE3_04_hpa_scaledown.png
          Scale-down: tras retirar la carga el HPA reduce las réplicas a 2.
-         CMD (CloudShell):
-           kubectl delete pod load-generator -n tienda
-           kubectl get hpa -n tienda -w        # esperar ~5 min: REPLICAS -> 2
-
-  MEJORA FUTURA: un Cluster Autoscaler escalaría también los nodos EC2 cuando el
-  HPA pida más pods de los que caben. No se implementó (limitación del Learner
-  Lab), pero queda documentado.
-
-
---------------------------------------------------------------------------------
- IE4 — PIPELINE CI/CD — build → push → deploy (15%)
---------------------------------------------------------------------------------
-Exigencia de la rúbrica · 100% de logro (ponderación 15%):
-"Pipeline completamente automatizado, funcional, seguro y documentado; deploy
- exitoso."
-
-El workflow .github/workflows/deploy-eks.yml se dispara con cada push a main (y
-manualmente). Sus etapas son: configurar credenciales AWS → login en ECR →
-build & push de las tres imágenes (frontend, backend, db) → despliegue en EKS
-(kubectl set image + rollout status). El despliegue tras commit es automático y
-la corrida completa toma ~2 minutos (corrida #2: 1m56s). Las imágenes se
-etiquetan con el SHA corto + latest para trazabilidad.
-
-  EVIDENCIA
-  ---------
-  [FOTO] fotos/IE4_01_pipeline_verde.png
-         Pipeline de GitHub Actions en verde: build, push y deploy con éxito.
-
-
---------------------------------------------------------------------------------
- IE5 — GESTIÓN DE SECRETS Y CREDENCIALES (5%)
---------------------------------------------------------------------------------
-Exigencia de la rúbrica · 100% de logro (ponderación 5%):
-"Secrets correctamente utilizados, seguros y bien estructurados; sin exposición."
-
-Los secretos viven en un GitHub Environment "production" (credenciales AWS, datos
-del clúster y MYSQL_ROOT_PASSWORD). Las credenciales de BD se manejan vía .env
-(en .gitignore) y el Secret de Kubernetes se genera dentro del pipeline a partir
-de los GitHub Secrets — nunca se versiona una contraseña. Se eligió un Environment
-(en lugar de secrets sueltos) por su aislamiento de alcance, sus reglas de
-protección y su trazabilidad.
-
-  EVIDENCIA
-  ---------
-  [FOTO] fotos/IE5_01_github_environment.png
-         GitHub Environment "production" para aislar los secretos del despliegue.
-  [FOTO] fotos/IE5_02_github_secrets.png
-         Secrets configurados (AWS_*, EKS_*, MYSQL_ROOT_PASSWORD).
-
-
---------------------------------------------------------------------------------
- IE6 — ANÁLISIS DE LOGS, MÉTRICAS Y TIEMPOS (10%)
---------------------------------------------------------------------------------
-Exigencia de la rúbrica · 100% de logro (ponderación 10%):
-"Análisis completo de logs, errores, tiempos y métricas; conclusiones claras."
-
-Logs: kubectl logs del backend muestra "Servidor backend escuchando en puerto
-3001" y "Pool de conexiones MySQL inicializado" (conexión Back↔DB correcta); el
-frontend (nginx) registra respuestas 200 OK, incluidas las sondas kube-probe
-(readiness/liveness funcionando). Métricas: uso de CPU/memoria por pod vía
-Metrics Server (kubectl top pods). CloudWatch: se activaron temporalmente los
-logs del plano de control (API Server + Auditoría) → log group
-/aws/eks/tienda-eks/cluster, desactivados tras la captura para no consumir
-créditos. Tiempos: ~2 min por corrida completa del pipeline.
-
-  EVIDENCIA
-  ---------
-  [FOTO] fotos/IE6_01_logs.png
-         Logs: backend escuchando y pool MySQL OK; frontend respondiendo 200 OK.
-         CMD (CloudShell):
-           kubectl logs deploy/tienda-backend -n tienda --tail=40
-           kubectl logs deploy/tienda-frontend -n tienda --tail=20
-  [FOTO] fotos/IE6_02_cloudwatch.png
-         CloudWatch: log group /aws/eks/tienda-eks/cluster con streams del API
-         Server (consola CloudWatch, no CloudShell).
-
-
---------------------------------------------------------------------------------
- IE7 — VALIDACIÓN FUNCIONAL DEL CLÚSTER (Front → Back) (10%)
---------------------------------------------------------------------------------
-Exigencia de la rúbrica · 100% de logro (ponderación 10%):
-"Servicios operativos, comunicación correcta, endpoints funcionando, logs y
- recuperación post-deploy demostrados."
-
-Se validó el funcionamiento integral de Tienda Perritos: CRUD completo de
-productos desde la web (crear / editar / eliminar) con la comunicación
-Front→Back→DB operativa. Se comprobó la autorrecuperación de Kubernetes: al
-borrar un pod del backend, el clúster creó automáticamente uno nuevo (AGE 15s)
-manteniendo las 2 réplicas. La recuperación post-redeploy también se verificó:
-cada push ejecuta set image + rollout status, reemplazando los pods sin caída del
-servicio.
-
-  EVIDENCIA
-  ---------
-  [FOTO] fotos/IE7_01_cloudshell_get_ns_nodes.png
-         Estado sano: 2 nodos Ready y todos los recursos del namespace tienda.
-         CMD (CloudShell):
-           kubectl get nodes -o wide
-           kubectl get all -n tienda
   [FOTO] fotos/IE7_02_pod_recreado.png
-         Autorrecuperación: al eliminar un pod del backend, Kubernetes recrea
-         otro automáticamente.
+         Autorrecuperación: al eliminar un pod del backend, Kubernetes recrea otro
+         automáticamente.
          CMD (CloudShell):
-           kubectl get pods -n tienda
            kubectl delete pod <pod-tienda-backend> -n tienda
-           kubectl get pods -n tienda        # aparece el nuevo pod recreado
-  [FOTO] fotos/IE7_03_crud_ok.png
-         CRUD funcional en la web: alta/edición/baja de productos (Front→Back→DB).
-  [FOTO] fotos/IE7_04_redeploy.png
-         Recuperación post-redeploy: pods reemplazados tras un nuevo despliegue.
-         CMD (CloudShell):
-           kubectl get pods -n tienda -o wide   # antes/después: pods nuevos = rollout OK
+           kubectl get pods -n tienda
 
-  NOTA SOBRE LA PERSISTENCIA DE DATOS (limitación conocida)
-  ---------------------------------------------------------
-  El Deployment de MySQL usa un volumen emptyDir, atado al ciclo de vida del pod,
-  por lo que la base de datos es efímera: cualquier reprogramación, borrado o
-  redeploy del pod tienda-db la reinicia desde cero, conservando solo los
-  productos semilla de la imagen y perdiendo los cambios hechos por CRUD en tiempo
-  de ejecución. Como el pipeline también aplica set image a la DB en cada push, la
-  demostración del CRUD debe realizarse después del último despliegue. El detalle
-  y la mejora futura propuesta se desarrollan en la sección "Problemas
-  encontrados y limitaciones".
+  MEJORA FUTURA: un Cluster Autoscaler escalaría también los nodos EC2 cuando el HPA
+  pida más pods de los que caben. No se implementó (limitación del Learner Lab), pero
+  queda documentado. Hoy el HPA es dinámico y el número de nodos es fijo (2–4).
 
 
 ================================================================================
- ROLES DE DOCKER COMPOSE, ECR Y EKS EN LA SOLUCIÓN (EFT)
+ 5. MEJORAS APLICADAS Y MEJORA CONTINUA
 ================================================================================
-Durante el diseño del EFT surgió una pregunta legítima que conviene responder
-explícitamente, porque delimita el rol de cada pieza de la arquitectura:
+Sobre la solución se aplicaron mejoras de estructura, contenerización, automatización
+y seguridad:
 
-  PREGUNTA: ¿Docker Compose se utiliza como una alternativa de respaldo a ECR?
-
-  RESPUESTA: No. Compose y ECR no compiten entre sí porque resuelven problemas
-  distintos. Los tres roles quedan así:
-
-  PIEZA            ROL                                          DÓNDE VIVE
-  ---------------  -------------------------------------------  ----------
-  Docker Compose   Orquestación del entorno de desarrollo       PC local
-                   LOCAL: levanta los 3 contenedores (frontend,
-                   backend, db) con red interna, healthcheck de
-                   MySQL y volumen, para desarrollar y probar
-                   antes de tocar la nube.
-  Amazon ECR       Registro de imágenes: la "bodega" donde el   AWS
-                   pipeline publica las imágenes construidas,
-                   con tags (SHA + latest) para trazabilidad.
-                   (La alternativa a ECR según la pauta sería
-                   Docker Hub; se eligió ECR.)
-  Amazon EKS       Orquestación de PRODUCCIÓN: corre esos       AWS
-                   mismos contenedores en la nube con escalado
-                   (HPA), balanceo (ELB) y autorrecuperación.
-
-  Compose no es un plan B: es un requisito propio del EFT. La rúbrica IE2 exige
-  "un archivo Docker Compose que define y levanta perfectamente todos los
-  servicios (frontend, backend, BD), redes y volúmenes para el entorno de
-  desarrollo", y el checklist de la presentación pide "demostrar cómo levanta
-  el entorno de desarrollo localmente". El flujo completo de la solución es:
-
-    Desarrollo local (docker compose) -> push a GitHub -> pipeline
-    (test -> build -> scan) -> publica en ECR -> despliega en EKS (producción)
-
-  Compose es el primer eslabón de esa cadena. Decisión de diseño clave: los
-  servicios del compose usan los MISMOS nombres DNS que los Services de
-  Kubernetes (tienda-db, tienda-backend, tienda-frontend), por lo que el mismo
-  artefacto corre sin cambios en local y en producción (el proxy de nginx y el
-  backend no distinguen el entorno).
-
-  Uso secundario (respaldo DE LA DEMO, no de ECR): si el día de la defensa el
-  Learner Lab no estuviera disponible, el compose permite demostrar la
-  aplicación completa funcionando en vivo desde la máquina local.
-
-  [FOTO] fotos/IE2_compose_up.png
-    (docker compose ps con los 3 servicios Up y la BD healthy)
-  [FOTO] fotos/IE2_app_local.png
-    (aplicación con productos en http://localhost:8080)
-  [FOTO] fotos/IE3_npm_test_local.png
-    (npm test con los 7 tests verdes — la BD se mockea, por eso corren sin
-    infraestructura y son la primera compuerta del pipeline)
+  • Desarrollo local: se incorporó docker-compose.yml (3 servicios, red interna,
+    healthcheck de MySQL, volumen y depends_on), con los mismos nombres DNS que en
+    Kubernetes para que el mismo artefacto corra en local y en la nube.
+  • Contenedores: backend con Dockerfile MULTIETAPA (deps → runtime) y usuario no-root
+    (USER node); .dockerignore en los 3 componentes; imágenes minimalistas.
+  • Calidad (CI): etapa de TEST en el pipeline (Jest + supertest con la BD mockeada)
+    como compuerta previa al despliegue (needs: test).
+  • Seguridad de imágenes: escaneo de vulnerabilidades con Trivy (HIGH/CRITICAL,
+    informativo) entre build y push (shift-left DevSecOps).
+  • Seguridad de red intra-clúster: NetworkPolicy db-allow-backend-only que aísla la
+    base de datos (solo el backend alcanza el 3306), con el enforcement de Network
+    Policy habilitado en el add-on VPC CNI.
+  • CI/CD: pipeline que usa el Environment production, genera el Secret de MySQL,
+    despliega también la imagen de la DB y etiqueta imágenes con SHA + latest; el
+    Metrics Server ya no se instala desde el pipeline (solo se verifica), eliminando el
+    conflicto que dejaba el HPA en <unknown>.
 
 
 ================================================================================
- MEJORAS APLICADAS Y MEJORA CONTINUA
-================================================================================
-Sobre el proyecto base se aplicaron mejoras de estructura, seguridad y
-automatización:
-
-  • Estructura: se unificó todo en un monorepo (los repos entregados eran
-    idénticos), de modo que GitHub Actions detecta el workflow; el material del
-    profesor se archivó en docs_profesor/.
-  • Código: se corrigió server.js (DB_HOST sin comillas → referencia inválida).
-  • Seguridad (IE5): se quitaron contraseñas horneadas en db/Dockerfile y el
-    mysql-secret.yaml versionado; ahora el Secret se genera en el pipeline desde
-    GitHub Secrets.
-  • Red (IE1/IE2): diseño de producción (nodos privados + NAT + ELB en públicas)
-    y etiquetado de subredes para el balanceo; se reemplazaron las anotaciones del
-    AWS LB Controller (no disponible en Learner Lab) por un Classic ELB.
-  • Seguridad de red intra-clúster (IE1): NetworkPolicy db-allow-backend-only que
-    aísla la base de datos (solo el backend alcanza el 3306 de MySQL), con el
-    enforcement de Network Policy habilitado en el add-on VPC CNI. Segmenta el
-    tráfico entre pods (defensa en profundidad), complementando el aislamiento por
-    subredes privadas.
-  • CI/CD (IE4): pipeline que usa el Environment production, genera el Secret de
-    MySQL, despliega también la imagen de la DB y etiqueta imágenes con SHA +
-    latest; el Metrics Server ya no se instala desde el pipeline (solo se
-    verifica), eliminando el conflicto que dejaba el HPA en <unknown>.
-
-
-================================================================================
- PROBLEMAS ENCONTRADOS Y LIMITACIONES
+ 6. PROBLEMAS ENCONTRADOS Y LIMITACIONES
 ================================================================================
 
   PROBLEMA                                  SOLUCIÓN
@@ -575,73 +655,63 @@ automatización:
   HPA en "<unknown>" y kubectl top sin      Conflicto entre el metrics-server de
   métricas.                                 upstream y el complemento del EKS; se
                                             quitó la instalación del pipeline y se
-                                            dejó solo el complemento gestionado.
+                                            dejó solo el complemento gestionado, con
+                                            una verificación de la Metrics API.
 
-  Credenciales del Learner Lab que rotan    Secrets en GitHub Environment + aws
-  cada sesión.                              eks update-kubeconfig al inicio de cada
-                                            sesión.
+  Job build-and-deploy fallaba al resolver  La versión fijada del trivy-action no
+  el escaneo Trivy.                         existía; se apuntó a la referencia vigente
+                                            (aquasecurity/trivy-action@master).
+
+  Credenciales del Learner Lab que rotan    Secrets en GitHub Environment + aws eks
+  cada sesión.                              update-kubeconfig al inicio de cada sesión.
 
   type: LoadBalancer requería AWS LB        Se usó un Classic ELB (Service
-  Controller (no disponible).               LoadBalancer sin anotaciones del
-                                            controller).
+  Controller (no disponible).               LoadBalancer sin anotaciones del controller).
 
-  Contraseñas versionadas en db/Dockerfile  Se eliminaron del repo; el Secret de
-  y mysql-secret.yaml.                       MySQL se genera en el pipeline desde
-                                            GitHub Secrets.
+  Riesgo de acceso directo frontend→BD a    NetworkPolicy db-allow-backend-only +
+  nivel de red (red plana de Kubernetes).   enforcement del add-on VPC CNI.
 
   LIMITACIÓN CONOCIDA: PERSISTENCIA EFÍMERA DE LA BASE DE DATOS
   ------------------------------------------------------------
-  El Deployment de MySQL (k8s/mysql-deployment.yaml) monta un volumen
-  emptyDir: {} en /var/lib/mysql. Un emptyDir está atado al ciclo de vida del pod
-  —no del contenedor—, por lo que la base de datos es efímera: si el pod tienda-db
-  se borra, se reprograma a otro nodo, o se realiza un redeploy/rollout
-  (kubectl set image), el volumen se destruye y MySQL se reinicializa desde cero.
-
-  Tras un reinicio del pod solo se recuperan los productos "semilla" horneados en
-  la imagen tienda-db (productos 1–5); se pierden los cambios realizados en tiempo
-  de ejecución (altas, ediciones y bajas vía CRUD). La consecuencia operativa es
-  relevante para la demo: dado que el pipeline CI/CD aplica set image también a la
-  DB en cada push, cada despliegue reinicia la base de datos, por lo que el CRUD
-  debe ejecutarse después del último deploy.
-
-  Esta decisión es intencional dado el contexto de laboratorio (AWS Academy
-  Learner Lab), donde se priorizó la simplicidad y el ahorro de créditos por sobre
-  la persistencia. La superación de esta limitación se detalla en la sección de
-  Conclusiones y mejora continua.
+  El Deployment de MySQL (k8s/mysql-deployment.yaml) monta un volumen emptyDir en
+  /var/lib/mysql. Un emptyDir está atado al ciclo de vida del pod, por lo que la base
+  de datos es efímera: si el pod tienda-db se borra, se reprograma o se hace
+  redeploy/rollout (kubectl set image), el volumen se destruye y MySQL se reinicializa
+  desde cero, conservando solo los productos "semilla" de la imagen y perdiendo los
+  cambios hechos por CRUD en tiempo de ejecución. Como el pipeline aplica set image
+  también a la DB en cada push, el CRUD debe demostrarse DESPUÉS del último despliegue.
+  Esta decisión es intencional dado el contexto de laboratorio (se priorizó la
+  simplicidad y el ahorro de créditos); su superación se detalla en Conclusiones.
 
 
 ================================================================================
- 5. CONCLUSIÓN
+ 7. CONCLUSIÓN
 ================================================================================
-La solución implementada cumple con los objetivos de negocio de Tienda Perritos y
-con los siete indicadores del encargo. La aplicación quedó orquestada en AWS EKS
-sobre una arquitectura de producción (2 AZ, nodos privados, ELB público) que
-aporta alta disponibilidad y seguridad por defensa en capas.
+La solución implementada cumple con los objetivos de negocio de Tienda Perritos y con
+los nueve puntos del encargo. La aplicación quedó contenedorizada para desarrollo
+local con Docker Compose y orquestada en producción sobre AWS EKS, en una arquitectura
+de producción (2 AZ, nodos privados, ELB público) que aporta alta disponibilidad y
+seguridad por defensa en capas.
 
 La automatización del ciclo de vida con GitHub Actions eliminó los despliegues
-manuales: un simple commit a main reconstruye, publica y despliega la aplicación
-en ~2 minutos, con recuperación sin downtime gracias a los rollouts de
-Kubernetes. La escalabilidad quedó demostrada con el HPA, que escaló el backend
-de 2 a 10 réplicas ante una carga real y volvió a su estado base al cesar la
-demanda. La seguridad de credenciales se resolvió sacando todo secreto del código
-y centralizándolo en un GitHub Environment, generando el Secret de Kubernetes en
-tiempo de despliegue.
+manuales: un commit a main ejecuta pruebas automáticas, escanea las imágenes,
+reconstruye, publica y despliega la aplicación en ~2 minutos, con recuperación sin
+downtime gracias a los rollouts de Kubernetes. La escalabilidad quedó demostrada con
+el HPA, que escaló el backend de 2 a 10 réplicas ante una carga real y volvió a su
+estado base al cesar la demanda. La seguridad se abordó sacando todo secreto del
+código (GitHub Environment), escaneando imágenes con Trivy y aislando la base de datos
+con una NetworkPolicy.
 
-En cuanto a mejora continua, la prioridad más relevante es dotar de persistencia
-a la base de datos, hoy efímera por el uso de emptyDir. La recomendación es
-reemplazar ese volumen por un PersistentVolumeClaim (PVC) respaldado por Amazon
-EBS —lo que requiere instalar el addon aws-ebs-csi-driver— y, idealmente, migrar
-el Deployment de MySQL a un StatefulSet, que aporta identidad de red y
-almacenamiento estables para cargas con estado. Como alternativa de producción,
-lo más robusto sería desacoplar la base de datos del clúster empleando un servicio
-gestionado como Amazon RDS for MySQL.
-
-Otros pasos naturales son: incorporar un Cluster Autoscaler para escalar también
-los nodos EC2; añadir HTTPS/Ingress con un certificado ACM y un dominio propio en
-Route 53; sumar pruebas automatizadas al pipeline antes del deploy; y desplegar un
-NAT Gateway por AZ para eliminar ese punto único de fallo en un entorno realmente
-productivo. En conjunto, el proyecto evidencia competencias integrales de DevOps:
-automatizar, desplegar y optimizar software en un entorno de nube real aplicando
-buenas prácticas profesionales.
+En cuanto a mejora continua, la prioridad es dotar de persistencia a la base de datos,
+hoy efímera por el uso de emptyDir. La recomendación es reemplazar ese volumen por un
+PersistentVolumeClaim (PVC) respaldado por Amazon EBS (addon aws-ebs-csi-driver) y,
+idealmente, migrar el Deployment de MySQL a un StatefulSet; como alternativa de
+producción, desacoplar la base de datos empleando un servicio gestionado como Amazon
+RDS for MySQL. Otros pasos naturales: incorporar un Cluster Autoscaler para escalar los
+nodos EC2; elevar el escaneo Trivy a modo bloqueante; añadir HTTPS/Ingress con
+certificado ACM y dominio propio en Route 53; y desplegar un NAT Gateway por AZ para
+eliminar el punto único de fallo. En conjunto, el proyecto evidencia competencias
+integrales de DevOps: automatizar, desplegar, asegurar y optimizar software en un
+entorno de nube real aplicando buenas prácticas profesionales.
 
 ================================================================================

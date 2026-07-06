@@ -148,33 +148,6 @@
     </section>
   </main>
 
-  <!-- 🎵 Banda sonora: tiki tiki (Ultra slowed) — QMIIR & SALIMA -->
-  <audio id="bgm" src="tiki-tiki-slowed.mp3" loop preload="auto"></audio>
-  <script>
-    (function () {
-      var bgm = document.getElementById('bgm');
-      if (!bgm) return;
-      bgm.volume = 0.6;
-
-      // 1) Intenta sonar al cargar (F5). Los navegadores suelen bloquear el
-      //    autoplay CON sonido si no hubo interaccion previa.
-      function intentar() {
-        var p = bgm.play();
-        if (p && p.catch) { p.catch(function () { /* bloqueado: esperamos gesto */ }); }
-      }
-      intentar();
-
-      // 2) Fallback: al primer clic o tecla en la pagina, arranca la musica
-      //    (basta con navegar/interactuar). Se auto-remueve tras el primer uso.
-      function arrancarConGesto() {
-        intentar();
-        window.removeEventListener('click', arrancarConGesto);
-        window.removeEventListener('keydown', arrancarConGesto);
-      }
-      window.addEventListener('click', arrancarConGesto);
-      window.addEventListener('keydown', arrancarConGesto);
-    })();
-  </script>
   <script src="app.js"></script>
 </body>
 </html>

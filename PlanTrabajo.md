@@ -5,10 +5,13 @@
 > **Cuando preguntes "¿en qué parte vamos?", la respuesta sale de aquí.**
 > Estados: ✅ hecho · 🔄 en curso · ⬜ pendiente. El checklist de requisitos vive en [PautaExamen.md](PautaExamen.md).
 
-**Última actualización:** 2026-07-05 — Fases A y B COMPLETAS y **pusheadas** a GitHub
-(repo público `tienda-perritos-eft`, 8 commits). Las 3 fotos del entorno local capturadas.
-El push disparó el pipeline: job `test` debe salir VERDE; `build-and-deploy` FALLA (esperado, sin AWS aún).
-**SIGUIENTE:** revisar la corrida en Actions + 📸 evidencia del job test verde → Fase C (infra AWS desde 0).
+**Última actualización:** 2026-07-05 — Fases A, B y **C COMPLETAS**. Infra AWS creada
+(VPC, EKS `tienda-eks`, node group 2×t3.medium, 3 repos ECR, Account ID `618629205592`).
+Pipeline completo **verde** (fix: `trivy-action@master`). App expuesta por ELB
+(`af52da...elb.amazonaws.com`). Mejora seguridad: NetworkPolicy `db-allow-backend-only`
+aplicada con enforcement VPC CNI ON (bloquea frontend→DB, permite backend→DB).
+**SIGUIENTE:** Fase D — evidencias nuevas (pipeline/ELB/HPA/NetworkPolicy), reestructurar
+informe a 9 puntos EFT, prueba de carga HPA, CloudWatch, diagrama, DOCX y PPT.
 
 ---
 

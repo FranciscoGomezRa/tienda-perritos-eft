@@ -35,26 +35,27 @@
 
   <!-- ===== Encabezado ===== -->
   <text class="t-title" x="560" y="38">Arquitectura — CI/CD + AWS EKS + HPA · Tienda Perritos</text>
-  <text class="t-sub" x="560" y="62">Patrón de producción · us-east-1 · cuenta 268450856324 · clúster tienda-eks (K8s 1.35)</text>
+  <text class="t-sub" x="560" y="62">Patrón de producción · us-east-1 · cuenta 618629205592 · clúster tienda-eks</text>
 
   <!-- ===== Carril CI/CD ===== -->
   <rect x="40" y="84" width="1040" height="150" rx="12" fill="#f6f0ff" stroke="#6e40c9" stroke-width="2"/>
   <text class="lane-lbl" x="58" y="108" fill="#6e40c9">1 · CI/CD — GitHub Actions</text>
 
   <rect x="70" y="124" width="180" height="92" rx="8" fill="#ffffff" stroke="#6e40c9" stroke-width="1.5"/>
-  <text class="box-t ctr" x="160" y="158">Desarrollador</text>
-  <text class="box-s ctr" x="160" y="180">git push</text>
-  <text class="box-s ctr" x="160" y="198">rama main</text>
+  <text class="box-t ctr" x="160" y="150">Desarrollo local</text>
+  <text class="box-xs ctr" x="160" y="170">docker compose up</text>
+  <text class="box-xs ctr" x="160" y="186">3 servicios · localhost:8080</text>
+  <text class="box-s ctr" x="160" y="208">→ git push (main)</text>
 
   <rect x="300" y="120" width="430" height="100" rx="8" fill="#ffffff" stroke="#6e40c9" stroke-width="1.5"/>
-  <text class="box-t ctr" x="515" y="150">GitHub Actions · job build-and-deploy</text>
-  <text class="box-s ctr" x="515" y="172">Environment: production</text>
+  <text class="box-t ctr" x="515" y="146">GitHub Actions · jobs: test → build-and-deploy</text>
+  <text class="box-xs ctr" x="515" y="166">job test (Jest+supertest) = compuerta · needs: test · Environment: production</text>
   <text class="box-xs ctr" x="515" y="192">7 secrets: AWS_ACCESS_KEY_ID · SECRET · SESSION_TOKEN · REGION</text>
   <text class="box-xs ctr" x="515" y="209">EKS_CLUSTER_NAME · EKS_NAMESPACE · MYSQL_ROOT_PASSWORD</text>
 
   <rect x="780" y="120" width="290" height="100" rx="8" fill="#ffffff" stroke="#6e40c9" stroke-width="1.5"/>
   <text class="box-t ctr" x="925" y="148">Pasos del pipeline</text>
-  <text class="box-s ctr" x="925" y="170">docker build ×3 → push ECR</text>
+  <text class="box-s ctr" x="925" y="170">docker build ×3 → Trivy scan → push ECR</text>
   <text class="box-s ctr" x="925" y="190">aws eks update-kubeconfig</text>
   <text class="box-xs ctr" x="925" y="208">kubectl apply / set image (ns, secret, deploys, HPA)</text>
 
@@ -73,7 +74,7 @@
 
   <!-- B) Control plane -->
   <rect x="130" y="438" width="570" height="100" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.8"/>
-  <text class="box-t ctr" x="415" y="466">Plano de control EKS · tienda-eks (K8s 1.35)</text>
+  <text class="box-t ctr" x="415" y="466">Plano de control EKS · tienda-eks</text>
   <text class="box-s ctr" x="415" y="489">endpoint público y privado · gestionado por AWS</text>
   <text class="box-xs ctr" x="415" y="510">add-ons: CoreDNS · kube-proxy · VPC CNI · Metrics Server</text>
   <text class="box-xs ctr" x="415" y="528">recibe los kubectl apply del pipeline</text>
@@ -160,7 +161,15 @@
   <text class="box-t ctr" x="110" y="1258">Secret</text>
   <text class="box-s ctr" x="110" y="1278">mysql-secret</text>
   <text class="box-xs ctr" x="110" y="1298">creado en el</text>
-  <text class="box-xs ctr" x="110" y="1314">pipeline (IE5)</text>
+  <text class="box-xs ctr" x="110" y="1314">pipeline (GitHub)</text>
+
+  <!-- NetworkPolicy: aísla la BD (solo backend -> 3306) -->
+  <rect x="720" y="1326" width="185" height="74" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+  <text class="box-t ctr" x="812" y="1352">NetworkPolicy</text>
+  <text class="box-xs ctr" x="812" y="1372">db-allow-backend-only</text>
+  <text class="box-xs ctr" x="812" y="1390">solo backend → :3306</text>
+  <line x1="718" y1="1363" x2="637" y2="1363" stroke="#c0392b" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arrR)"/>
+  <text class="edge" x="646" y="1355" fill="#c0392b">aísla</text>
 
   <!-- ====================== CONEXIONES ====================== -->
   <!-- CI/CD lane -> ECR (docker push) -->
@@ -219,14 +228,16 @@
 
   <!-- ===== Leyenda ===== -->
   <rect x="40" y="1440" width="1040" height="170" rx="10" fill="#f7f7fb" stroke="#999" stroke-width="1.3"/>
-  <text class="box-t" x="60" y="1466">Mapeo a indicadores (IE1–IE7)</text>
-  <text class="box-xs" x="60" y="1490">IE1 · Infraestructura EKS (VPC + node group)</text>
-  <text class="box-xs" x="430" y="1490">IE2 · ELB + URL pública</text>
-  <text class="box-xs" x="730" y="1490">IE3 · Autoscaling con HPA</text>
-  <text class="box-xs" x="60" y="1512">IE4 · Pipeline CI/CD (GitHub Actions)</text>
-  <text class="box-xs" x="430" y="1512">IE5 · Secrets / Environment</text>
-  <text class="box-xs" x="730" y="1512">IE6 · Logs (kubectl / CloudWatch)</text>
-  <text class="box-xs" x="60" y="1534">IE7 · CRUD + autorrecuperación de pods</text>
+  <text class="box-t" x="60" y="1466">Elementos de la solución (9 puntos del EFT)</text>
+  <text class="box-xs" x="60" y="1490">1 · Dev local (Docker Compose)</text>
+  <text class="box-xs" x="430" y="1490">2 · Contenedores multietapa (non-root)</text>
+  <text class="box-xs" x="730" y="1490">3 · Registro de imágenes (ECR + tags)</text>
+  <text class="box-xs" x="60" y="1512">4 · CI/CD: test → build → Trivy → deploy</text>
+  <text class="box-xs" x="430" y="1512">5 · Infra EKS (VPC + node group)</text>
+  <text class="box-xs" x="730" y="1512">6 · Secrets / Environment</text>
+  <text class="box-xs" x="60" y="1534">7 · Observabilidad (kubectl / CloudWatch)</text>
+  <text class="box-xs" x="430" y="1534">8 · Seguridad (Trivy + NetworkPolicy)</text>
+  <text class="box-xs" x="730" y="1534">9 · Orquestación + HPA (autoescalado)</text>
   <text class="box-xs" x="60" y="1568" fill="#888">Líneas sólidas = tráfico / flujo de despliegue   ·   líneas punteadas = relaciones de control y datos</text>
   <text class="box-xs" x="60" y="1588" fill="#888">Flujo de usuario: Usuario → ELB :80 → Service frontend → pods frontend → Service backend :3001 → pods backend → Service db :3306 → MySQL</text>
 </svg>
