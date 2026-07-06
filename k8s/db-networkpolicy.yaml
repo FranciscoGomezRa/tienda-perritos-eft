@@ -1,0 +1,29 @@
+# NetworkPolicy — aísla la base de datos (defensa en profundidad).
+# Por defecto la red de Kubernetes es plana: cualquier pod puede hablar con
+# cualquier otro. Esta política aplica default-deny de INGRESO sobre el pod de
+# MySQL y solo permite conexiones al puerto 3306 desde los pods del backend.
+# Así, aunque el frontend (u otro pod comprometido) intente conectarse a la BD,
+# el tráfico se descarta.
+#
+# REQUISITO EKS: el add-on "Amazon VPC CNI" debe tener habilitado el
+# enforcement de Network Policy (Enable Network Policy = ON). Sin eso, el
+# manifiesto se acepta pero NO se aplica.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-allow-backend-only
+  namespace: tienda
+spec:
+  podSelector:
+    matchLabels:
+      app: tienda-db          # la política aplica al pod de MySQL
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: tienda-backend   # SOLO el backend puede entrar
+      ports:
+        - protocol: TCP
+          port: 3306

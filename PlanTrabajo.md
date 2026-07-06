@@ -53,13 +53,14 @@ El push disparó el pipeline: job `test` debe salir VERDE; `build-and-deploy` FA
 | # | Paso | Estado | Sección informe | Foto |
 |---|---|---|---|---|
 | C1 | VPC `tienda-vpc` 10.0.0.0/16, 2 AZ, 2 públicas + 4 privadas, 1 NAT | ⬜ | §5 Infraestructura | ♻️ `IE1_01..05` (misma receta; recapturar solo si cambia algo) |
-| C2 | Clúster EKS `tienda-eks`: LabRole, auth API, endpoint público y privado, observabilidad OFF, complementos CoreDNS/kube-proxy/VPC CNI/**Metrics Server** | ⬜ | §5 Infra + §9 Orquestación | ♻️ `IE1_06..14` |
+| C2 | Clúster EKS `tienda-eks`: LabRole, auth API, endpoint público y privado, observabilidad OFF, complementos CoreDNS/kube-proxy/VPC CNI/**Metrics Server**. ⚠️ En el add-on **VPC CNI** activar **Enable Network Policy** (necesario para C9) | ⬜ | §5 Infra + §9 Orquestación | ♻️ `IE1_06..14` |
 | C3 | Node group `tienda-nodes`: AL2023, t3.medium, 2/2/4, 4 subredes privadas, SSH off | ⬜ | §5 Infra | ♻️ `IE1_15..20` |
 | C4 | 3 repos ECR (`tienda-frontend/backend/db`, Mutable, AES-256) | ⬜ | §3 Registro | ♻️ `IE2_01_ecr_repos.png` |
 | C5 | Actualizar Account ID en `k8s/*-deployment.yaml` + commit | ⬜ | §3 Registro | — |
 | C6 | GitHub Environment `production` + 7 secrets (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_REGION, EKS_CLUSTER_NAME, EKS_NAMESPACE, MYSQL_ROOT_PASSWORD — usar una fuerte esta vez) | ⬜ | §6 Secretos | ♻️ `IE5_01/IE5_02` (renombrar) |
 | C7 | Push a main → pipeline completo verde | ⬜ | §4 CI/CD | 📸 `IE3_job_test_actions.png`, `IE3_trivy_scan.png`, `IE3_pipeline_verde.png`, `IE3_ecr_tags.png` |
 | C8 | EXTERNAL-IP del ELB → app en navegador | ⬜ | §5 Infra + §9 | 📸 `IE5_app_elb.png` (♻️ referencia: IE2_02/03/04 de P3) |
+| C9 | **MEJORA seguridad:** aplicar `k8s/db-networkpolicy.yaml` (aísla la BD: solo backend→3306) + prueba de bloqueo desde frontend. Requiere Enable Network Policy en VPC CNI (C2) | ⬜ | §5 Infra + §8 Seguridad | 📸 `IE1_21_networkpolicy_db.png` (nueva) |
 
 ---
 

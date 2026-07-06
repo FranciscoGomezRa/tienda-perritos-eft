@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: mysql
-          image: 268450856324.dkr.ecr.us-east-1.amazonaws.com/tienda-db:latest # Account ID 268450856324. El pipeline la sobrescribe con `kubectl set image`.
+          image: 618629205592.dkr.ecr.us-east-1.amazonaws.com/tienda-db:latest # Account ID 618629205592. El pipeline la sobrescribe con `kubectl set image`.
           ports:
             - containerPort: 3306
           env:

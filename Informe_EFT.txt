@@ -195,6 +195,42 @@ de control como para los nodos, y un node group de instancias t3.medium
   privados y queda auditado por IAM), de modo que dejar el acceso remoto en OFF no
   elimina ese plan B.
 
+  AISLAMIENTO DE LA BASE DE DATOS CON NETWORKPOLICY (defensa en profundidad)
+  -------------------------------------------------------------------------
+  Por defecto la red de Kubernetes es plana: todo pod puede alcanzar a cualquier
+  otro por su IP o su Service. Esto significa que, aunque la arquitectura de 3
+  capas hace que el frontend hable solo con el backend y solo el backend con la
+  base de datos, a nivel de red nada IMPIDE que el pod del frontend (u otro pod
+  comprometido) se conecte directo al puerto 3306 de MySQL.
+
+  Para cerrar esa brecha se agregó la NetworkPolicy k8s/db-networkpolicy.yaml, que
+  aplica default-deny de ingreso sobre el pod tienda-db y solo permite conexiones
+  al 3306 provenientes de pods con la etiqueta app=tienda-backend. Así el acceso a
+  la BD deja de ser una convención de diseño y pasa a ser una regla IMPUESTA por
+  el clúster: cualquier intento de conexión que no venga del backend se descarta.
+
+  REQUISITO EN EKS: las NetworkPolicies solo surten efecto si el CNI las hace
+  cumplir. El complemento Amazon VPC CNI las soporta, pero hay que ACTIVAR el
+  enforcement (opción "Enable Network Policy" del add-on VPC CNI). Sin ese ajuste,
+  el manifiesto se acepta pero no bloquea nada. Se dejó habilitado al crear el
+  clúster. Esta es una defensa complementaria al aislamiento de subredes privadas:
+  la red separa el clúster de Internet, y la NetworkPolicy segmenta el tráfico
+  ENTRE pods dentro del clúster.
+
+  [FOTO] fotos/IE1_21_networkpolicy_db.png
+         NetworkPolicy db-allow-backend-only activa y prueba de bloqueo: desde un
+         pod del frontend la conexión al 3306 de tienda-db falla (timeout),
+         mientras que desde el backend sí conecta.
+         CMD (CloudShell):
+           kubectl apply -f k8s/db-networkpolicy.yaml
+           kubectl get networkpolicy -n tienda
+           # prueba de bloqueo (debe fallar / timeout):
+           kubectl exec -n tienda deploy/tienda-frontend -- \
+             sh -c "nc -zv -w3 tienda-db 3306"
+           # prueba de acceso permitido (debe conectar):
+           kubectl exec -n tienda deploy/tienda-backend -- \
+             sh -c "nc -zv -w3 tienda-db 3306"
+
   EVIDENCIA
   ---------
   [FOTO] fotos/IE1_01_vpc_creacion.png
@@ -519,6 +555,11 @@ automatización:
   • Red (IE1/IE2): diseño de producción (nodos privados + NAT + ELB en públicas)
     y etiquetado de subredes para el balanceo; se reemplazaron las anotaciones del
     AWS LB Controller (no disponible en Learner Lab) por un Classic ELB.
+  • Seguridad de red intra-clúster (IE1): NetworkPolicy db-allow-backend-only que
+    aísla la base de datos (solo el backend alcanza el 3306 de MySQL), con el
+    enforcement de Network Policy habilitado en el add-on VPC CNI. Segmenta el
+    tráfico entre pods (defensa en profundidad), complementando el aislamiento por
+    subredes privadas.
   • CI/CD (IE4): pipeline que usa el Environment production, genera el Secret de
     MySQL, despliega también la imagen de la DB y etiqueta imágenes con SHA +
     latest; el Metrics Server ya no se instala desde el pipeline (solo se
